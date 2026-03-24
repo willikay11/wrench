@@ -1,0 +1,10 @@
+{
+  "name": "@wrench/db",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js",
+    "types": "supabase gen types typescript --local > ../../apps/web/src/types/database.ts"
+  }
+}
