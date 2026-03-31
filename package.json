@@ -9,8 +9,13 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "db:migrate": "pnpm --filter @wrench/db migrate",
-    "db:seed": "pnpm --filter @wrench/db seed"
+    "db:start":  "supabase start --workdir packages/supabase",
+    "db:stop":   "supabase stop --workdir packages/supabase",
+    "db:reset":  "supabase db reset --workdir packages/supabase",
+    "db:migrate": "supabase migration up --workdir packages/supabase",
+    "db:types":  "supabase gen types typescript --workdir packages/supabase --local > apps/web/src/types/database.ts",
+    "db:seed":   "supabase db seed --workdir packages/supabase",
+    "db:studio": "supabase studio --workdir packages/supabase"
   },
   "devDependencies": {
     "prettier": "^3.0.0"
