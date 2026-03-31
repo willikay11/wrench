@@ -13,7 +13,7 @@
     "db:stop":   "supabase stop --workdir packages/supabase",
     "db:reset":  "supabase db reset --workdir packages/supabase",
     "db:migrate": "supabase migration up --workdir packages/supabase",
-    "db:types":  "supabase gen types typescript --workdir packages/supabase --local > apps/web/src/types/database.ts",
+    "db:types": "cd packages/supabase && supabase gen types typescript --local > ../../apps/web/src/types/database.ts",
     "db:seed":   "supabase db seed --workdir packages/supabase",
     "db:studio": "supabase studio --workdir packages/supabase"
   },
