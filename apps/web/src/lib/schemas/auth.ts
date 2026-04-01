@@ -26,3 +26,10 @@ export const signupSchema = z
   })
 
 export type SignupValues = z.infer<typeof signupSchema>
+
+export const loginSchema = z.object({
+  email: z.string().email("Please enter a valid email address"),
+  password: z.string().min(1, "Please enter your password"),
+})
+
+export type LoginValues = z.infer<typeof loginSchema>
