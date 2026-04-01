@@ -1,5 +1,6 @@
 // apps/web/src/app/auth/signup/page.test.tsx
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import type { ReactNode } from "react"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import SignupPage from "./page"
@@ -12,7 +13,7 @@ vi.mock("next/navigation", () => ({
 
 // ── Mock next/link ─────────────────────────────────────────────────────────
 vi.mock("next/link", () => ({
-  default: ({ children, href }: { children: React.ReactNode; href: string }) => (
+  default: ({ children, href }: { children: ReactNode; href: string }) => (
     <a href={href}>{children}</a>
   ),
 }))
@@ -114,17 +115,16 @@ describe("SignupPage", () => {
 
     it("shows password mismatch error", async () => {
       const user = userEvent.setup()
-      render(<SignupPage />)
 
-      await user.type(screen.getAllByPlaceholderText("e.g. Will Kamau")[1], "Will")
-      await user.type(screen.getAllByPlaceholderText("you@example.com")[1], "will@wrench.app")
+      await user.type(screen.getByPlaceholderText("e.g. Will Kamau"), "Will")
+      await user.type(screen.getByPlaceholderText("you@example.com"), "will@wrench.app")
 
       const allPasswordInputs = screen.getAllByDisplayValue("")
-      await user.type(allPasswordInputs[2], "Wrench123")
-      await user.type(allPasswordInputs[3], "Different1")
+      await user.type(allPasswordInputs[0], "Wrench123")
+      await user.type(allPasswordInputs[1], "Different1")
 
       await user.click(
-        screen.getAllByRole("button", { name: /create account/i })[1]
+        screen.getByRole("button", { name: /create account/i })
       )
 
       await waitFor(() => {

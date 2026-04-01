@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
-import * as z from "zod"
 import { signupSchema, type SignupValues } from "@/lib/schemas/auth"
 
 import { Button } from "@/components/ui/button"

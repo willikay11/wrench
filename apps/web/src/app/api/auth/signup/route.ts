@@ -11,7 +11,16 @@ const bodySchema = z.object({
 })
 
 export async function POST(req: Request) {
-  const body = await req.json()
+  let body: unknown
+
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid JSON in request body." },
+      { status: 400 }
+    )
+  }
 
   // Validate the incoming body server-side — never trust client input
   const parsed = bodySchema.safeParse(body)
