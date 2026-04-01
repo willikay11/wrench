@@ -1,6 +1,7 @@
 // apps/web/src/lib/schemas/auth.test.ts
 import { describe, it, expect } from "vitest"
-import { signupSchema } from "./auth"
+import { loginSchema, signupSchema } from "./auth"
+import z from "zod"
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 // Valid base data we can spread and override per test
@@ -13,8 +14,12 @@ const valid = {
 }
 
 // Helper that parses and returns the first error message for a given field
-function getError(data: object, field: string): string | undefined {
-  const result = signupSchema.safeParse(data)
+function getError(
+  data: object,
+  field: string,
+  schema: z.ZodTypeAny = signupSchema
+): string | undefined {
+  const result = schema.safeParse(data)
   if (result.success) return undefined
   return result.error.issues.find((i) => i.path[0] === field)?.message
 }
@@ -194,5 +199,83 @@ describe("signupSchema — empty form submission", () => {
     expect(fields).toContain("email")
     expect(fields).toContain("password")
     expect(fields).toContain("region")
+  })
+})
+
+// ── loginSchema ────────────────────────────────────────────────────────────
+describe("loginSchema — valid data", () => {
+  it("passes with valid email and password", () => {
+    const result = loginSchema.safeParse({
+      email: "will@wrench.app",
+      password: "Wrench123",
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it("passes with a simple password — no strength rules on login", () => {
+    const result = loginSchema.safeParse({
+      email: "will@wrench.app",
+      password: "password",
+    })
+    expect(result.success).toBe(true)
+  })
+})
+
+describe("loginSchema — email", () => {
+  it("fails when email is empty", () => {
+    const error = getError(
+      { email: "", password: "Wrench123" },
+      "email",
+      loginSchema
+    )
+    expect(error).toBeDefined()
+  })
+
+  it("fails when email format is invalid", () => {
+    const error = getError(
+      { email: "notanemail", password: "Wrench123" },
+      "email",
+      loginSchema
+    )
+    expect(error).toBe("Please enter a valid email address")
+  })
+
+  it("fails when email has no domain", () => {
+    const error = getError(
+      { email: "will@", password: "Wrench123" },
+      "email",
+      loginSchema
+    )
+    expect(error).toBe("Please enter a valid email address")
+  })
+})
+
+describe("loginSchema — password", () => {
+  it("fails when password is empty", () => {
+    const error = getError(
+      { email: "will@wrench.app", password: "" },
+      "password",
+      loginSchema
+    )
+    expect(error).toBe("Please enter your password")
+  })
+
+  it("passes with a single character password — strength not validated on login", () => {
+    const error = getError(
+      { email: "will@wrench.app", password: "x" },
+      "password",
+      loginSchema
+    )
+    expect(error).toBeUndefined()
+  })
+})
+
+describe("loginSchema — empty form", () => {
+  it("fails on both fields when form is empty", () => {
+    const result = loginSchema.safeParse({ email: "", password: "" })
+    expect(result.success).toBe(false)
+    const fields = result.error?.issues.map((i) => i.path[0])
+    expect(fields).toContain("email")
+    expect(fields).toContain("password")
   })
 })
