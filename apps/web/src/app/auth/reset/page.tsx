@@ -30,7 +30,103 @@ import { Logo } from "@/components/brand/logo"
 export default function ResetPasswordPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = React.useState(false)
+  const [isSessionReady, setIsSessionReady] = React.useState(false)
+  const [isCheckingSession, setIsCheckingSession] = React.useState(true)
   const supabase = React.useMemo(() => createClient({ flowType: "implicit" }), [])
+
+  React.useEffect(() => {
+    async function initializeRecoverySession() {
+      setIsCheckingSession(true)
+
+      const searchParams = new URLSearchParams(window.location.search)
+      const hashParams = new URLSearchParams(
+        window.location.hash.startsWith("#")
+          ? window.location.hash.slice(1)
+          : window.location.hash
+      )
+
+      const urlError =
+        searchParams.get("error_description") ??
+        searchParams.get("error") ??
+        hashParams.get("error_description") ??
+        hashParams.get("error")
+
+      if (urlError) {
+        toast.error(urlError)
+        setIsSessionReady(false)
+        setIsCheckingSession(false)
+        return
+      }
+
+      const code = searchParams.get("code")
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code)
+
+        if (error) {
+          toast.error(error.message ?? "Reset link is invalid or has expired.")
+          setIsSessionReady(false)
+          setIsCheckingSession(false)
+          return
+        }
+
+        window.history.replaceState(null, "", window.location.pathname)
+      }
+
+      const tokenHash = searchParams.get("token_hash")
+      const tokenType = searchParams.get("type")
+      if (tokenHash && tokenType === "recovery") {
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: "recovery",
+        })
+
+        if (error) {
+          toast.error(error.message ?? "Reset link is invalid or has expired.")
+          setIsSessionReady(false)
+          setIsCheckingSession(false)
+          return
+        }
+
+        window.history.replaceState(null, "", window.location.pathname)
+      }
+
+      const accessToken = hashParams.get("access_token")
+      const refreshToken = hashParams.get("refresh_token")
+
+      if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+
+        if (error) {
+          toast.error(error.message ?? "Reset link is invalid or has expired.")
+          setIsSessionReady(false)
+          setIsCheckingSession(false)
+          return
+        }
+
+        // Remove tokens from the URL after establishing session.
+        window.history.replaceState(null, "", window.location.pathname)
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
+        toast.error("Reset link is invalid or has expired.")
+        setIsSessionReady(false)
+        setIsCheckingSession(false)
+        return
+      }
+
+      setIsSessionReady(true)
+      setIsCheckingSession(false)
+    }
+
+    void initializeRecoverySession()
+  }, [supabase])
 
   const form = useForm<ResetPasswordValues>({
     resolver: zodResolver(resetPasswordSchema),
@@ -41,6 +137,11 @@ export default function ResetPasswordPage() {
   })
 
   async function onSubmit(values: ResetPasswordValues) {
+    if (!isSessionReady) {
+      toast.error("Reset link is invalid or has expired.")
+      return
+    }
+
     setIsLoading(true)
 
     const { error } = await supabase.auth.updateUser({
@@ -127,9 +228,13 @@ export default function ResetPasswordPage() {
               type="submit"
               form="reset-password-form"
               className="w-full bg-brand hover:bg-brand/90 text-white"
-              disabled={isLoading}
+              disabled={isLoading || isCheckingSession || !isSessionReady}
             >
-              {isLoading ? "Updating password…" : "Update password"}
+              {isLoading
+                ? "Updating password…"
+                : isCheckingSession
+                  ? "Validating reset link…"
+                  : "Update password"}
             </Button>
           </CardFooter>
         </Card>

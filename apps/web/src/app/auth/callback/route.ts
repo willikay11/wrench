@@ -12,6 +12,14 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/auth/login?error=missing_code`)
   }
 
+  // Recovery flow should exchange the code in the browser where PKCE verifier
+  // storage lives. Forward to reset page and let client handle the exchange.
+  if (type === "recovery") {
+    return NextResponse.redirect(
+      `${origin}/auth/reset?code=${encodeURIComponent(code)}`
+    )
+  }
+
   const supabase = createClient()
   const { error } = await supabase.auth.exchangeCodeForSession(code)
 
@@ -19,10 +27,6 @@ export async function GET(request: Request) {
     return NextResponse.redirect(
       `${origin}/auth/login?error=${encodeURIComponent(error.message)}`
     )
-  }
-
-  if (type === "recovery") {
-    return NextResponse.redirect(`${origin}/auth/reset`)
   }
 
   return NextResponse.redirect(`${origin}${next}`)
