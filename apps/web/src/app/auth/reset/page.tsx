@@ -1,16 +1,14 @@
-// apps/web/src/app/auth/login/page.tsx
+// apps/web/src/app/auth/reset/page.tsx
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
 
-import { loginSchema, type LoginValues } from "@/lib/schemas/auth"
+import { resetPasswordSchema, type ResetPasswordValues } from "@/lib/schemas/auth"
 import { Button } from "@/components/ui/button"
-import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import {
   Card,
   CardContent,
@@ -28,25 +26,25 @@ import {
 import { Input } from "@/components/ui/input"
 import { Logo } from "@/components/brand/logo"
 
-export default function LoginPage() {
+export default function ResetPasswordPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = React.useState(false)
 
-  const form = useForm<LoginValues>({
-    resolver: zodResolver(loginSchema),
+  const form = useForm<ResetPasswordValues>({
+    resolver: zodResolver(resetPasswordSchema),
     defaultValues: {
-      email: "",
       password: "",
+      confirmPassword: "",
     },
   })
 
-  async function onSubmit(values: LoginValues) {
+  async function onSubmit(values: ResetPasswordValues) {
     setIsLoading(true)
 
-    const res = await fetch("/api/auth/login", {
+    const res = await fetch("/api/auth/reset-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
+      body: JSON.stringify({ password: values.password }),
     })
 
     const data = await res.json()
@@ -57,38 +55,41 @@ export default function LoginPage() {
       return
     }
 
-    toast.success("Welcome back.")
+    toast.success("Password updated. Welcome back.")
     router.push("/dashboard")
   }
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <Logo />
+        <Logo variant="full" size="md" theme="light" className="mb-6" />
 
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-medium">
-              Welcome back
+              Set a new password
             </CardTitle>
-            <CardDescription>Sign in to your builds.</CardDescription>
+            <CardDescription>
+              Choose a strong password for your account.
+            </CardDescription>
           </CardHeader>
 
           <CardContent>
-            <form id="login-form" onSubmit={form.handleSubmit(onSubmit)}>
+            <form id="reset-password-form" onSubmit={form.handleSubmit(onSubmit)}>
               <FieldGroup>
                 <Controller
-                  name="email"
+                  name="password"
                   control={form.control}
                   render={({ field, fieldState }) => (
                     <Field data-invalid={fieldState.invalid}>
-                      <FieldLabel htmlFor="login-email">Email</FieldLabel>
+                      <FieldLabel htmlFor="reset-password">
+                        New password
+                      </FieldLabel>
                       <Input
                         {...field}
-                        id="login-email"
-                        type="email"
-                        placeholder="you@example.com"
-                        autoComplete="email"
+                        id="reset-password"
+                        type="password"
+                        autoComplete="new-password"
                         aria-invalid={fieldState.invalid}
                       />
                       {fieldState.invalid && (
@@ -99,26 +100,18 @@ export default function LoginPage() {
                 />
 
                 <Controller
-                  name="password"
+                  name="confirmPassword"
                   control={form.control}
                   render={({ field, fieldState }) => (
                     <Field data-invalid={fieldState.invalid}>
-                      <div className="flex items-center justify-between">
-                        <FieldLabel htmlFor="login-password">
-                          Password
-                        </FieldLabel>
-                        <Link
-                          href="/auth/forgot-password"
-                          className="text-xs text-muted-foreground hover:text-foreground"
-                        >
-                          Forgot password?
-                        </Link>
-                      </div>
+                      <FieldLabel htmlFor="reset-confirm-password">
+                        Confirm new password
+                      </FieldLabel>
                       <Input
                         {...field}
-                        id="login-password"
+                        id="reset-confirm-password"
                         type="password"
-                        autoComplete="current-password"
+                        autoComplete="new-password"
                         aria-invalid={fieldState.invalid}
                       />
                       {fieldState.invalid && (
@@ -131,40 +124,18 @@ export default function LoginPage() {
             </form>
           </CardContent>
 
-          <CardFooter className="flex-col gap-3">
+          <CardFooter>
             <Button
               type="submit"
-              form="login-form"
+              form="reset-password-form"
               className="w-full bg-brand hover:bg-brand/90 text-white"
               disabled={isLoading}
             >
-              {isLoading ? "Signing in…" : "Sign in"}
+              {isLoading ? "Updating password…" : "Update password"}
             </Button>
-
-            <div className="relative w-full">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs">
-                <span className="bg-card px-2 text-muted-foreground">or</span>
-              </div>
-            </div>
-
-            <GoogleSignInButton disabled={isLoading} />
-
           </CardFooter>
         </Card>
-
-        <p className="text-center text-sm text-muted-foreground mt-4">
-          Don&apos;t have an account?{" "}
-          <Link
-            href="/auth/signup"
-            className="text-foreground font-medium hover:underline underline-offset-2"
-          >
-            Create one
-          </Link>
-        </p>
       </div>
     </div>
   )
-}
+}   
