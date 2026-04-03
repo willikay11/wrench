@@ -3,12 +3,13 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
 
 import { loginSchema, type LoginValues } from "@/lib/schemas/auth"
+import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import {
@@ -30,7 +31,9 @@ import { Logo } from "@/components/brand/logo"
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = React.useState(false)
+  const supabase = React.useMemo(() => createClient(), [])
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -43,22 +46,32 @@ export default function LoginPage() {
   async function onSubmit(values: LoginValues) {
     setIsLoading(true)
 
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
-    })
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: values.email,
+        password: values.password,
+      })
 
-    const data = await res.json()
+      if (error) {
+        toast.error(error.message ?? "Something went wrong. Please try again.")
+        return
+      }
 
-    if (!res.ok) {
-      toast.error(data.error ?? "Something went wrong. Please try again.")
+      toast.success("Welcome back.")
+      const next = searchParams.get("next") ?? "/"
+
+      // Prefer SPA navigation, then force a hard navigation as a fallback in
+      // case middleware/session propagation lags behind in the same tick.
+      router.replace(next)
+      router.refresh()
+      window.setTimeout(() => {
+        if (window.location.pathname !== next) {
+          window.location.assign(next)
+        }
+      }, 150)
+    } finally {
       setIsLoading(false)
-      return
     }
-
-    toast.success("Welcome back.")
-    router.push("/dashboard")
   }
 
   return (

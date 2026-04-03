@@ -1,7 +1,9 @@
 // apps/web/src/app/api/auth/login/route.ts
-import { createClient } from "@/lib/supabase/server"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import type { Database } from "@/types/database"
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -20,7 +22,27 @@ export async function POST(req: Request) {
   }
 
   const { email, password } = parsed.data
-  const supabase = createClient()
+
+  let response = NextResponse.json({ success: true }, { status: 200 })
+  const cookieStore = cookies()
+
+  const supabase = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          response = NextResponse.json({ success: true }, { status: 200 })
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options)
+          })
+        },
+      },
+    }
+  )
 
   const { error } = await supabase.auth.signInWithPassword({
     email,
@@ -31,5 +53,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 400 })
   }
 
-  return NextResponse.json({ success: true }, { status: 200 })
+  return response
 }
