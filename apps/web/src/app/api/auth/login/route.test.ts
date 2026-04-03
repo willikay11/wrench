@@ -3,9 +3,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { POST } from "./route"
 
 const mockSignInWithPassword = vi.fn()
+const mockCookiesGetAll = vi.fn(() => [])
 
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: () => ({
+vi.mock("next/headers", () => ({
+  cookies: () => ({
+    getAll: mockCookiesGetAll,
+  }),
+}))
+
+vi.mock("@supabase/ssr", () => ({
+  createServerClient: () => ({
     auth: {
       signInWithPassword: mockSignInWithPassword,
     },
@@ -28,6 +35,7 @@ const validBody = {
 describe("POST /api/auth/login", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockCookiesGetAll.mockReturnValue([])
   })
 
   describe("success", () => {
