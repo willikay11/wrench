@@ -8,6 +8,7 @@ import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
 
 import { forgotPasswordSchema, type ForgotPasswordValues } from "@/lib/schemas/auth"
+import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -38,16 +39,13 @@ export default function ForgotPasswordPage() {
   async function onSubmit(values: ForgotPasswordValues) {
     setIsLoading(true)
 
-    const res = await fetch("/api/auth/forgot-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
+    const supabase = createClient({ flowType: "implicit" })
+    const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
+      redirectTo: `${window.location.origin}/auth/reset`,
     })
 
-    const data = await res.json()
-
-    if (!res.ok) {
-      toast.error(data.error ?? "Something went wrong. Please try again.")
+    if (error) {
+      toast.error(error.message ?? "Something went wrong. Please try again.")
       setIsLoading(false)
       return
     }

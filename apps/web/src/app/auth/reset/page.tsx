@@ -8,6 +8,7 @@ import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
 
 import { resetPasswordSchema, type ResetPasswordValues } from "@/lib/schemas/auth"
+import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -29,6 +30,7 @@ import { Logo } from "@/components/brand/logo"
 export default function ResetPasswordPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = React.useState(false)
+  const supabase = React.useMemo(() => createClient({ flowType: "implicit" }), [])
 
   const form = useForm<ResetPasswordValues>({
     resolver: zodResolver(resetPasswordSchema),
@@ -41,16 +43,12 @@ export default function ResetPasswordPage() {
   async function onSubmit(values: ResetPasswordValues) {
     setIsLoading(true)
 
-    const res = await fetch("/api/auth/reset-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: values.password }),
+    const { error } = await supabase.auth.updateUser({
+      password: values.password,
     })
 
-    const data = await res.json()
-
-    if (!res.ok) {
-      toast.error(data.error ?? "Something went wrong. Please try again.")
+    if (error) {
+      toast.error(error.message ?? "Something went wrong. Please try again.")
       setIsLoading(false)
       return
     }
