@@ -1,8 +1,12 @@
+from collections.abc import AsyncIterator
+from typing import Any
+
 import anthropic
+
 from app.core.config import settings
 
 
-def build_system_prompt(build_context: dict) -> str:
+def build_system_prompt(build_context: dict[str, Any]) -> str:
     return f"""You are Wrench Advisor — an expert automotive build consultant.
 
 Current build context:
@@ -20,11 +24,14 @@ Your responsibilities:
 - Prefix safety-critical warnings with [SAFETY]"""
 
 
-async def stream_advisor_response(messages: list[dict], build_context: dict):
+async def stream_advisor_response(
+    messages: list[dict[str, Any]],
+    build_context: dict[str, Any],
+) -> AsyncIterator[str]:
     """
     Yields SSE-formatted chunks for streaming to the client.
     """
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    client: Any = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
     with client.messages.stream(
         model="claude-sonnet-4-20250514",

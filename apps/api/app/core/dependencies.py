@@ -1,14 +1,23 @@
 # apps/api/app/core/dependencies.py
+from typing import TypedDict
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 from app.core.supabase import get_supabase
+
+
+class CurrentUser(TypedDict):
+    id: str
+    email: str
+
 
 bearer = HTTPBearer()
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer),
-) -> dict:
+) -> CurrentUser:
     """
     Extracts the JWT from the Authorization header and verifies it
     with Supabase. Returns the user dict if valid, raises 401 if not.
@@ -31,5 +40,5 @@ async def get_current_user(
 
     return {
         "id": response.user.id,
-        "email": response.user.email,
+        "email": response.user.email or "",
     }

@@ -1,13 +1,17 @@
-from app.core.dependencies import get_current_user
-from app.schemas.builds import BuildCreate, BuildResponse
+from typing import Any, cast
+
 from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.core.dependencies import CurrentUser, get_current_user
 from app.core.supabase import get_supabase
+from app.schemas.builds import BuildCreate, BuildResponse
 
 router = APIRouter()
 
- # GET /v1/builds
+
+# GET /v1/builds
 @router.get("/", response_model=list[BuildResponse])
-async def get_builds(user = Depends(get_current_user)):
+async def get_builds(user: CurrentUser = Depends(get_current_user)) -> list[dict[str, Any]]:
     """
     Returns all builds owned by the authenticated user.
     The user_id filter is enforced here AND by RLS in Postgres —
@@ -23,13 +27,13 @@ async def get_builds(user = Depends(get_current_user)):
         .execute()
     )
 
-    return response.data
+    return cast(list[dict[str, Any]], response.data)
 
 @router.post("/", response_model=BuildResponse, status_code=status.HTTP_201_CREATED)
 async def create_build(
     payload: BuildCreate,
-    user: dict = Depends(get_current_user),
-):
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
     """
     Creates a new build owned by the authenticated user.
     user_id is set server-side from the verified JWT —
@@ -55,4 +59,4 @@ async def create_build(
             detail="Failed to create build",
         )
 
-    return response.data[0]
+    return cast(dict[str, Any], response.data[0])
