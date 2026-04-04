@@ -219,3 +219,47 @@ class TestCreateBuild:
     def test_returns_401_without_auth_header(self):
         res = client.post("/v1/builds/", json=self.VALID_PAYLOAD)
         assert res.status_code == 401
+
+
+# ── POST /v1/builds/{id} ────────────────────────────────────────────────────────
+class TestGetBuild:
+    def test_returns_200_with_build(self, mock_supabase):
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = MOCK_BUILD
+
+        res = client.get("/v1/builds/build-001", headers=AUTH_HEADER)
+
+        assert res.status_code == 200
+        assert res.json()["title"] == "E30 K24 swap"
+        assert res.json()["id"] == "build-001"
+
+    def test_filters_by_build_id(self, mock_supabase):
+        mock_select = mock_supabase.return_value.table.return_value.select.return_value
+        mock_select.eq.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = MOCK_BUILD
+
+        client.get("/v1/builds/build-001", headers=AUTH_HEADER)
+
+        mock_select.eq.return_value.eq.assert_called_once_with("id", "build-001")
+
+    def test_returns_404_when_build_not_found(self, mock_supabase):
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = None
+
+        res = client.get("/v1/builds/build-001", headers=AUTH_HEADER)
+
+        assert res.status_code == 404
+
+    def test_returns_401_without_auth_header(self):
+        res = client.get("/v1/builds/build-001")
+        assert res.status_code == 401

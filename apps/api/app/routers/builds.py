@@ -9,7 +9,6 @@ from app.schemas.builds import BuildCreate, BuildResponse
 router = APIRouter()
 
 
-# GET /v1/builds
 @router.get("/", response_model=list[BuildResponse])
 async def get_builds(user: CurrentUser = Depends(get_current_user)) -> list[dict[str, Any]]:
     """
@@ -60,3 +59,29 @@ async def create_build(
         )
 
     return cast(dict[str, Any], response.data[0])
+
+
+@router.get("/{build_id}", response_model=BuildResponse)
+async def get_build(build_id: str, user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    """
+    Returns a single build by ID, but only if it belongs to the authenticated user.
+    This is used by the frontend when navigating to /builds/{id} to fetch the build details.
+    """
+    supabase = get_supabase()
+
+    response = (
+        supabase.table("builds")
+        .select("*")
+        .eq("user_id", user["id"])
+        .eq("id", build_id)
+        .single()
+        .execute()
+    )
+
+    if not response.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Build not found",
+        )
+
+    return cast(dict[str, Any], response.data)
