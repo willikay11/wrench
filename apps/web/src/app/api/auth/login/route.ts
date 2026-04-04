@@ -3,7 +3,14 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { z } from "zod"
+
 import type { Database } from "@/types/database"
+
+type CookieToSet = {
+  name: string
+  value: string
+  options?: Parameters<Awaited<ReturnType<typeof cookies>>["set"]>[2]
+}
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -24,7 +31,7 @@ export async function POST(req: Request) {
   const { email, password } = parsed.data
 
   let response = NextResponse.json({ success: true }, { status: 200 })
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
 
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,7 +41,7 @@ export async function POST(req: Request) {
         getAll() {
           return cookieStore.getAll()
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: CookieToSet[]) {
           response = NextResponse.json({ success: true }, { status: 200 })
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options)

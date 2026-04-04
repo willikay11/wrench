@@ -25,5 +25,5 @@ app.include_router(vision.router, prefix="/v1/vision", tags=["vision"])
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict[str, str]:
     return {"status": "ok", "version": "0.1.0"}

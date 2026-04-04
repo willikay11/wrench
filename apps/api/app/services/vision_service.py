@@ -1,14 +1,21 @@
-import anthropic
 import base64
+import json
+from typing import Any, cast
+
+import anthropic
+
 from app.core.config import settings
 
 
-async def analyse_car_image(image_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
+async def analyse_car_image(
+    image_bytes: bytes,
+    mime_type: str = "image/jpeg",
+) -> dict[str, Any]:
     """
     Send a car image to Claude Vision and return structured build data.
     Called asynchronously after build creation — never blocks the user.
     """
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    client: Any = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
     image_data = base64.standard_b64encode(image_bytes).decode("utf-8")
 
@@ -45,5 +52,9 @@ async def analyse_car_image(image_bytes: bytes, mime_type: str = "image/jpeg") -
         ],
     )
 
-    import json
-    return json.loads(message.content[0].text)
+    for block in getattr(message, "content", []):
+        text = getattr(block, "text", None)
+        if isinstance(text, str):
+            return cast(dict[str, Any], json.loads(text))
+
+    return {}
