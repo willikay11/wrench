@@ -173,7 +173,7 @@ async def delete_build(build_id: str, user: CurrentUser = Depends(get_current_us
         .execute()
     )
 
-    if response.error:
+    if response.data is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete build",
