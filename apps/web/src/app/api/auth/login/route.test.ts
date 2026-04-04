@@ -63,7 +63,7 @@ describe("POST /api/auth/login", () => {
 
   describe("invalid request body", () => {
     it("returns 400 when email is missing", async () => {
-      const noEmail = { ...validBody }
+      const noEmail: Partial<typeof validBody> = { ...validBody }
       delete noEmail.email
       const res = await POST(makeRequest(noEmail))
       expect(res.status).toBe(400)
@@ -75,7 +75,7 @@ describe("POST /api/auth/login", () => {
     })
 
     it("returns 400 when password is missing", async () => {
-      const noPassword = { ...validBody }
+      const noPassword: Partial<typeof validBody> = { ...validBody }
       delete noPassword.password
       const res = await POST(makeRequest(noPassword))
       expect(res.status).toBe(400)

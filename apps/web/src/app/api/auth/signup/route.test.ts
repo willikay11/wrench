@@ -82,7 +82,7 @@ describe("POST /api/auth/signup", () => {
   // ── Validation failures ───────────────────────────────────────────────────
   describe("invalid request body", () => {
     it("returns 400 when email is missing", async () => {
-      const noEmail = { ...validBody }
+      const noEmail: Partial<typeof validBody> = { ...validBody }
       delete noEmail.email
       const res = await POST(makeRequest(noEmail))
       expect(res.status).toBe(400)
@@ -99,7 +99,7 @@ describe("POST /api/auth/signup", () => {
     })
 
     it("returns 400 when displayName is missing", async () => {
-      const noName = { ...validBody }
+      const noName: Partial<typeof validBody> = { ...validBody }
       delete noName.displayName
       const res = await POST(makeRequest(noName))
       expect(res.status).toBe(400)
@@ -111,7 +111,7 @@ describe("POST /api/auth/signup", () => {
     })
 
     it("returns 400 when region is missing", async () => {
-      const noRegion = { ...validBody }
+      const noRegion: Partial<typeof validBody> = { ...validBody }
       delete noRegion.region
       const res = await POST(makeRequest(noRegion))
       expect(res.status).toBe(400)

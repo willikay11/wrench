@@ -3,6 +3,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
@@ -29,7 +30,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Logo } from "@/components/brand/logo"
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = React.useState(false)
@@ -60,8 +61,6 @@ export default function LoginPage() {
       toast.success("Welcome back.")
       const next = searchParams.get("next") ?? "/"
 
-      // Prefer SPA navigation, then force a hard navigation as a fallback in
-      // case middleware/session propagation lags behind in the same tick.
       router.replace(next)
       router.refresh()
       window.setTimeout(() => {
@@ -164,7 +163,6 @@ export default function LoginPage() {
             </div>
 
             <GoogleSignInButton disabled={isLoading} />
-
           </CardFooter>
         </Card>
 
@@ -179,5 +177,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   )
 }
