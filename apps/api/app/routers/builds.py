@@ -139,3 +139,42 @@ async def update_build(
         )
 
     return cast(dict[str, Any], response.data[0])
+
+# ── DELETE /v1/builds/{id} ────────────────────────────────────────────────────────
+@router.delete("/{build_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_build(build_id: str, user: CurrentUser = Depends(get_current_user)) -> None:
+    """
+    Deletes a build by ID, but only if it belongs to the authenticated user.
+    This also cascades to delete related parts and conversations via RLS policies.
+    """
+    supabase = get_supabase()
+
+    # First, verify the build exists and belongs to the user
+    existing = (
+        supabase.table("builds")
+        .select("*")
+        .eq("user_id", user["id"])
+        .eq("id", build_id)
+        .single()
+        .execute()
+    )
+
+    if not existing.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Build not found",
+        )
+
+    # Then perform the delete
+    response = (
+        supabase.table("builds")
+        .delete()
+        .eq("id", build_id)
+        .execute()
+    )
+
+    if response.data is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete build",
+        )

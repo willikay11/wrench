@@ -358,7 +358,47 @@ class TestUpdateBuild:
         assert res.json()["engine_swap"] == "New engine"
         assert res.json()["goals"] == ["new goal"]
         assert res.json()["status"] == "planning"  # Unchanged
-    
-    
 
-        
+# ── DELETE /v1/builds/{id} ────────────────────────────────────────────────────────
+class TestDeleteBuild:
+    def test_returns_204_when_build_deleted(self, mock_supabase):
+        # Mock the initial existence check
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = MOCK_BUILD
+
+        # Mock the delete response
+        mock_supabase.return_value.table.return_value \
+            .delete.return_value \
+            .eq.return_value \
+            .execute.return_value.error = None
+
+        res = client.delete(
+            "/v1/builds/build-001",
+            headers=AUTH_HEADER,
+        )
+
+        assert res.status_code == 204
+
+    def test_returns_404_when_build_not_found(self, mock_supabase):
+        # Mock the existence check to return no build
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = None
+
+        res = client.delete(
+            "/v1/builds/build-001",
+            headers=AUTH_HEADER,
+        )
+
+        assert res.status_code == 404
+
+    def test_returns_401_without_auth_header(self):
+        res = client.delete("/v1/builds/build-001")
+        assert res.status_code == 401
