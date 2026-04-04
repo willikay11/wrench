@@ -4,11 +4,11 @@
   "scripts": {
     "dev": "docker compose up",
     "dev:web": "pnpm --filter @wrench/web dev",
-    "dev:api": "pnpm --filter @wrench/api dev",
+    "dev:api": "cd apps/api && source ../../.venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
     "build": "pnpm --filter @wrench/web build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
+    "test": "pnpm --filter @wrench/web test && cd apps/api && source ../../.venv/bin/activate && pytest -v",
     "db:start":  "supabase start --workdir packages/supabase",
     "db:stop":   "supabase stop --workdir packages/supabase",
     "db:reset":  "supabase db reset --workdir packages/supabase",
