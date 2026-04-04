@@ -263,3 +263,102 @@ class TestGetBuild:
     def test_returns_401_without_auth_header(self):
         res = client.get("/v1/builds/build-001")
         assert res.status_code == 401
+
+#── PUT /v1/builds/{id} ────────────────────────────────────────────────────────
+class TestUpdateBuild:
+    def test_returns_200_with_updated_build(self, mock_supabase):
+        # Mock the initial existence check
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = MOCK_BUILD
+
+        # Mock the update response
+        updated_build = {**MOCK_BUILD, "title": "Updated title"}
+        mock_supabase.return_value.table.return_value \
+            .update.return_value \
+            .eq.return_value \
+            .execute.return_value.data = [updated_build]
+
+        res = client.put(
+            "/v1/builds/build-001",
+            json={"title": "Updated title"},
+            headers=AUTH_HEADER,
+        )
+
+        assert res.status_code == 200
+        assert res.json()["title"] == "Updated title"
+        assert res.json()["id"] == "build-001"
+
+    def test_returns_404_when_build_not_found(self, mock_supabase):
+        # Mock the existence check to return no build
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = None
+        
+        res = client.put(
+            "/v1/builds/build-001",
+            json={"title": "Updated title"},
+            headers=AUTH_HEADER,
+        )
+
+        assert res.status_code == 404
+    
+    def test_returns_401_without_auth_header(self):
+        res = client.put(
+            "/v1/builds/build-001",
+            json={"title": "Updated title"},
+        )
+        assert res.status_code == 401
+
+    def test_updates_only_allowed_fields(self, mock_supabase):
+        # Mock the initial existence check
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = MOCK_BUILD
+
+        payload = {
+            "title": "Updated title",
+            "donor_car": "New donor",
+            "engine_swap": "New engine",
+            "goals": ["new goal"],
+            "status": "completed",  # This should be ignored
+        }
+
+        # Mock the update response to reflect only the allowed fields changing
+        updated_build = {
+            **MOCK_BUILD,
+            "title": payload["title"],
+            "donor_car": payload["donor_car"],
+            "engine_swap": payload["engine_swap"],
+            "goals": payload["goals"],
+        }
+        mock_supabase.return_value.table.return_value \
+            .update.return_value \
+            .eq.return_value \
+            .execute.return_value.data = [updated_build]
+
+        res = client.put(
+            "/v1/builds/build-001",
+            json=payload,
+            headers=AUTH_HEADER,
+        )
+
+        assert res.status_code == 200
+        assert res.json()["title"] == "Updated title"
+        assert res.json()["donor_car"] == "New donor"
+        assert res.json()["engine_swap"] == "New engine"
+        assert res.json()["goals"] == ["new goal"]
+        assert res.json()["status"] == "planning"  # Unchanged
+    
+    
+
+        

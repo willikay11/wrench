@@ -9,6 +9,7 @@ from app.schemas.builds import BuildCreate, BuildResponse
 router = APIRouter()
 
 
+# ── GET /v1/builds ────────────────────────────────────────────────────────
 @router.get("/", response_model=list[BuildResponse])
 async def get_builds(user: CurrentUser = Depends(get_current_user)) -> list[dict[str, Any]]:
     """
@@ -28,6 +29,7 @@ async def get_builds(user: CurrentUser = Depends(get_current_user)) -> list[dict
 
     return cast(list[dict[str, Any]], response.data)
 
+#─ POST /v1/builds ────────────────────────────────────────────────────────
 @router.post("/", response_model=BuildResponse, status_code=status.HTTP_201_CREATED)
 async def create_build(
     payload: BuildCreate,
@@ -61,6 +63,7 @@ async def create_build(
     return cast(dict[str, Any], response.data[0])
 
 
+#── GET /v1/builds/{id} ────────────────────────────────────────────────────────
 @router.get("/{build_id}", response_model=BuildResponse)
 async def get_build(build_id: str, user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
     """
@@ -85,3 +88,54 @@ async def get_build(build_id: str, user: CurrentUser = Depends(get_current_user)
         )
 
     return cast(dict[str, Any], response.data)
+
+
+# ── PUT /v1/builds/{id} ────────────────────────────────────────────────────────
+@router.put("/{build_id}", response_model=BuildResponse)
+async def update_build(
+    build_id: str,
+    payload: BuildCreate,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Updates an existing build by ID, but only if it belongs to the authenticated user.
+    The client can update the title, donor_car, engine_swap, and goals.
+    """
+    supabase = get_supabase()
+
+    # First, verify the build exists and belongs to the user
+    existing = (
+        supabase.table("builds")
+        .select("*")
+        .eq("user_id", user["id"])
+        .eq("id", build_id)
+        .single()
+        .execute()
+    )
+
+    if not existing.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Build not found",
+        )
+
+    # Then perform the update
+    response = (
+        supabase.table("builds")
+        .update({
+            "title": payload.title,
+            "donor_car": payload.donor_car,
+            "engine_swap": payload.engine_swap,
+            "goals": payload.goals,
+        })
+        .eq("id", build_id)
+        .execute()
+    )
+
+    if not response.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update build",
+        )
+
+    return cast(dict[str, Any], response.data[0])
