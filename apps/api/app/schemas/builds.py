@@ -25,3 +25,5 @@ class BuildResponse(BaseModel):
     is_public: bool
     created_at: datetime
     updated_at: datetime
+    parts_total: int = 0
+    parts_sourced: int = 0

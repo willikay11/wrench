@@ -2,7 +2,12 @@
 import { apiFetch } from "./client"
 import type { Database } from "@/types/database"
 
-export type Build = Database["public"]["Tables"]["builds"]["Row"]
+type BuildRow = Database["public"]["Tables"]["builds"]["Row"]
+
+export type Build = BuildRow & {
+  parts_total?: number
+  parts_sourced?: number
+}
 
 export interface BuildsResponse {
   builds: Build[]
