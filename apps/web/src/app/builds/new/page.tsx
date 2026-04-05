@@ -227,20 +227,44 @@ export default function NewBuildPage() {
                     <div
                       className={cn(
                         "flex size-9 items-center justify-center rounded-full border text-sm font-semibold",
-                        isActive || isComplete
-                          ? "border-brand bg-brand text-white"
-                          : "border-border bg-card text-muted-foreground"
+                        isComplete
+                          ? "border-success bg-success text-white"
+                          : isActive
+                            ? "border-brand bg-brand text-white"
+                            : "border-border bg-card text-muted-foreground"
                       )}
                     >
-                      {step.id}
+                      {isComplete ? (
+                        <svg
+                          viewBox="0 0 16 16"
+                          className="size-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
+                        </svg>
+                      ) : (
+                        step.id
+                      )}
                     </div>
                     {step.id < STEPS.length && (
-                      <div className="mt-2 h-10 w-px bg-border" />
+                      <div
+                        className={cn(
+                          "mt-2 h-10 w-px",
+                          isComplete ? "bg-success/50" : "bg-border"
+                        )}
+                      />
                     )}
                   </div>
 
                   <div className="pt-1">
-                    <p className="text-base font-semibold">{step.title}</p>
+                    <p className={cn("text-base font-semibold", isActive ? "text-foreground" : "text-foreground/90")}>
+                      {step.title}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {step.description}
                     </p>
@@ -340,45 +364,81 @@ export default function NewBuildPage() {
               <>
                 <CardHeader>
                   <CardTitle className="text-3xl font-semibold tracking-tight">
-                    Add a reference image
+                    Upload a reference image
                   </CardTitle>
                   <CardDescription className="text-base">
-                    Upload a photo of the car to help us identify the build.
+                    Wrench will use AI to identify your car and spot visible mods.
                   </CardDescription>
                 </CardHeader>
 
-                <CardContent>
-                  <Field>
-                    <FieldLabel htmlFor="build-image">Reference image</FieldLabel>
-                    <Input
-                      id="build-image"
-                      type="file"
-                      accept="image/*"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0] ?? null
-                        updateField("image", file)
-                      }}
-                    />
-                    <FieldDescription>
-                      Optional for now — you can upload a photo later.
-                    </FieldDescription>
-                  </Field>
+                <CardContent className="space-y-4">
+                  <input
+                    id="build-image"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null
+                      updateField("image", file)
+                    }}
+                  />
 
-                  {formState.image && (
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      Selected: <span className="font-medium text-foreground">{formState.image.name}</span>
+                  <label
+                    htmlFor="build-image"
+                    className={cn(
+                      "flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-6 py-8 text-center transition-colors",
+                      formState.image
+                        ? "border-brand bg-brand/5"
+                        : "border-border bg-background/40 hover:border-brand/60"
+                    )}
+                  >
+                    <div className="mb-4 flex size-14 items-center justify-center rounded-full border border-border bg-card/80">
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="size-5 text-muted-foreground"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M12 16V7" />
+                        <path d="m8.5 10.5 3.5-3.5 3.5 3.5" />
+                        <path d="M6 17.5a3 3 0 0 1-3-3V14a3 3 0 0 1 3-3h1" />
+                        <path d="M18 17.5a3 3 0 0 0 3-3V14a3 3 0 0 0-3-3h-1" />
+                      </svg>
+                    </div>
+
+                    <p className="text-xl font-medium text-foreground">
+                      {formState.image
+                        ? formState.image.name
+                        : "Drop a photo here or click to browse"}
                     </p>
-                  )}
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      JPG, PNG or WEBP · max 10MB
+                    </p>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={handleContinue}
+                    className="mx-auto block text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    Skip for now — I&apos;ll add a photo later
+                  </button>
                 </CardContent>
 
                 <CardFooter className="items-center justify-between gap-3">
                   <Button type="button" variant="outline" onClick={handleBack}>
                     ← Back
                   </Button>
+                  <p className="text-sm text-muted-foreground">Step 2 of 3</p>
                   <Button
                     type="button"
+                    variant="outline"
                     onClick={handleContinue}
-                    className="bg-brand text-white hover:bg-brand/90"
+                    className="min-w-32"
                   >
                     Continue →
                   </Button>
