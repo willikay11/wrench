@@ -1,6 +1,6 @@
 // apps/web/src/components/build/BuildCard.test.tsx
 import { describe, it, expect, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { BuildCard } from "./build-card"
 import type { Build } from "@/lib/api/builds"
 
@@ -11,8 +11,14 @@ vi.mock("next/link", () => ({
 }))
 
 vi.mock("next/image", () => ({
-  default: ({ src, alt }: { src: string; alt: string }) => (
-    <img src={src} alt={alt} />
+  default: ({
+    src,
+    alt,
+    unoptimized: _unoptimized,
+    ...props
+  }: React.ImgHTMLAttributes<HTMLImageElement> & { unoptimized?: boolean }) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={typeof src === "string" ? src : ""} alt={alt ?? ""} {...props} />
   ),
 }))
 
@@ -138,6 +144,18 @@ describe("BuildCard", () => {
         "src",
         "https://example.com/car.jpg"
       )
+    })
+
+    it("falls back to the placeholder if the image fails to load", () => {
+      render(
+        <BuildCard
+          build={{ ...mockBuild, image_url: "https://example.com/broken.jpg" }}
+        />
+      )
+
+      fireEvent.error(screen.getByRole("img"))
+
+      expect(screen.queryByRole("img")).not.toBeInTheDocument()
     })
   })
 

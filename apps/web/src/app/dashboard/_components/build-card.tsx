@@ -1,6 +1,7 @@
 // apps/web/src/components/build/BuildCard.tsx
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { formatDistanceToNow } from "date-fns"
@@ -28,6 +29,12 @@ const statusConfig = {
 } as const
 
 export function BuildCard({ build }: BuildCardProps) {
+  const [imageFailed, setImageFailed] = React.useState(false)
+
+  React.useEffect(() => {
+    setImageFailed(false)
+  }, [build.image_url])
+
   const status =
     statusConfig[build.status as keyof typeof statusConfig] ??
     statusConfig.planning
@@ -44,90 +51,99 @@ export function BuildCard({ build }: BuildCardProps) {
 
   return (
     <Link href={`/builds/${build.id}`} className="block h-full">
-      <div className="bg-card border border-border rounded-lg p-4 hover:border-border/80 transition-colors cursor-pointer h-full flex flex-col gap-3">
+      <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-lg">
+        <div className="relative aspect-[16/10] w-full overflow-hidden bg-secondary">
+          {build.image_url && !imageFailed ? (
+            <Image
+              src={build.image_url}
+              alt={build.title}
+              fill
+              sizes="(min-width: 1280px) 20vw, (min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+              unoptimized
+              onError={() => setImageFailed(true)}
+              className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-secondary">
+              <CarPlaceholder />
+            </div>
+          )}
 
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h3 className="text-sm font-medium text-foreground truncate">
+          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+
+          <div className="absolute right-3 top-3">
+            <Badge
+              variant="outline"
+              className={cn(
+                "border-white/20 bg-black/40 text-[10px] font-medium text-white backdrop-blur-sm",
+                status.className
+              )}
+            >
+              {status.label}
+            </Badge>
+          </div>
+
+          <div className="absolute inset-x-0 bottom-0 p-4">
+            <h3 className="truncate text-base font-semibold text-white">
               {build.title}
             </h3>
             {car && (
-              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+              <p className="mt-1 truncate text-xs text-white/85">
                 {car}
                 {build.engine_swap && ` · ${build.engine_swap}`}
               </p>
             )}
           </div>
-          <Badge
-            variant="outline"
-            className={cn(
-              "text-[10px] shrink-0 font-medium",
-              status.className
-            )}
-          >
-            {status.label}
-          </Badge>
         </div>
 
-        <div className="w-full h-[72px] bg-secondary rounded-md flex items-center justify-center border border-border/50 overflow-hidden">
-          {build.image_url ? (
-            <Image
-              src={build.image_url}
-              alt={build.title}
-              width={300}
-              height={72}
-              className="w-full h-full object-cover"
+        <div className="flex flex-1 flex-col gap-4 p-4">
+          <div className="grid grid-cols-2 gap-3">
+            <MetaItem
+              label="Goals"
+              value={build.goals?.join(", ") || "None set"}
             />
-          ) : (
-            <CarPlaceholder />
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-          <MetaItem
-            label="Goals"
-            value={build.goals?.join(", ") || "None set"}
-          />
-          <MetaItem label="Updated" value={updatedAt} />
-          <MetaItem
-            label="Parts"
-            value={
-              (build.parts_total ?? 0) > 0
-                ? `${build.parts_sourced ?? 0} of ${build.parts_total ?? 0} sourced`
-                : "None added yet"
-            }
-          />
-        </div>
-
-        <div className="mt-auto space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground">
-              Progress
-            </span>
-            <span className="text-[10px] font-medium text-muted-foreground">
-              {progressPercent}%
-            </span>
-          </div>
-          <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden">
-            <div
-              className="h-full bg-brand rounded-full transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
+            <MetaItem label="Updated" value={updatedAt} />
+            <MetaItem
+              label="Parts"
+              value={
+                (build.parts_total ?? 0) > 0
+                  ? `${build.parts_sourced ?? 0} of ${build.parts_total ?? 0} sourced`
+                  : "None added yet"
+              }
             />
           </div>
-        </div>
 
-      </div>
+          <div className="mt-auto space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground">
+                Progress
+              </span>
+              <span className="text-[10px] font-medium text-muted-foreground">
+                {progressPercent}%
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+              <div
+                className="h-full rounded-full bg-brand transition-all duration-300"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </article>
     </Link>
   )
 }
 
 function MetaItem({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <span className="text-[10px] text-muted-foreground">{label} </span>
-      <span className="text-[10px] font-medium text-muted-foreground">
+    <div className="min-w-0 rounded-lg bg-muted/30 p-2.5">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 text-[11px] font-medium text-foreground/90">
         {value}
-      </span>
+      </p>
     </div>
   )
 }

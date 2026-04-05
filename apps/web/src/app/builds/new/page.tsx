@@ -7,6 +7,8 @@ import { Tick02Icon } from "@hugeicons/core-free-icons"
 import { toast } from "sonner"
 
 import { Logo } from "@/components/brand/logo"
+import { ImageUpload } from "@/components/build/ImageUpload"
+import { ImagePreviewGrid } from "@/components/build/ImagePreviewGrid"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -61,7 +63,7 @@ type FormState = {
   title: string
   car: string
   goals: GoalValue[]
-  image: File | null
+  images: File[]
 }
 
 type FormErrors = {
@@ -97,7 +99,7 @@ export default function NewBuildPage() {
     title: "",
     car: "",
     goals: [],
-    image: null,
+    images: [],
   })
 
   const isStepOneValid = React.useMemo(() => {
@@ -105,7 +107,7 @@ export default function NewBuildPage() {
   }, [formState])
 
   const isStepOneComplete = isStepOneValid
-  const isStepTwoComplete = Boolean(formState.image) || currentStep > 2
+  const isStepTwoComplete = formState.images.length > 0 || currentStep > 2
 
   function updateField<K extends keyof FormState>(field: K, value: FormState[K]) {
     const nextState = {
@@ -185,21 +187,23 @@ export default function NewBuildPage() {
         throw new Error(createdBuild?.detail ?? "Failed to create build")
       }
 
-      if (formState.image && createdBuild?.id) {
-        const imageForm = new FormData()
-        imageForm.append("image", formState.image)
+      if (formState.images.length > 0 && createdBuild?.id) {
+        for (const image of formState.images) {
+          const imageForm = new FormData()
+          imageForm.append("image", image)
 
-        const imageRes = await fetch(`${API_URL}/v1/builds/${createdBuild.id}/image`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: imageForm,
-        })
+          const imageRes = await fetch(`${API_URL}/v1/builds/${createdBuild.id}/image`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: imageForm,
+          })
 
-        if (!imageRes.ok) {
-          const imageError = await imageRes.json().catch(() => null)
-          throw new Error(imageError?.detail ?? "Build created, but image upload failed")
+          if (!imageRes.ok) {
+            const imageError = await imageRes.json().catch(() => null)
+            throw new Error(imageError?.detail ?? "Build created, but image upload failed")
+          }
         }
       }
 
@@ -375,53 +379,10 @@ export default function NewBuildPage() {
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                  <input
-                    id="build-image"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="sr-only"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null
-                      updateField("image", file)
-                    }}
+                  <ImageUpload
+                    files={formState.images}
+                    onChange={(files) => updateField("images", files)}
                   />
-
-                  <label
-                    htmlFor="build-image"
-                    className={cn(
-                      "flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-6 py-8 text-center transition-colors",
-                      formState.image
-                        ? "border-brand bg-brand/5"
-                        : "border-border bg-background/40 hover:border-brand/60"
-                    )}
-                  >
-                    <div className="mb-4 flex size-14 items-center justify-center rounded-full border border-border bg-card/80">
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="size-5 text-muted-foreground"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M12 16V7" />
-                        <path d="m8.5 10.5 3.5-3.5 3.5 3.5" />
-                        <path d="M6 17.5a3 3 0 0 1-3-3V14a3 3 0 0 1 3-3h1" />
-                        <path d="M18 17.5a3 3 0 0 0 3-3V14a3 3 0 0 0-3-3h-1" />
-                      </svg>
-                    </div>
-
-                    <p className="text-xl font-medium text-foreground">
-                      {formState.image
-                        ? formState.image.name
-                        : "Drop a photo here or click to browse"}
-                    </p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      JPG, PNG or WEBP · max 10MB
-                    </p>
-                  </label>
 
                   <button
                     type="button"
@@ -469,10 +430,25 @@ export default function NewBuildPage() {
                         .join(", ")}
                     />
                     <ReviewRow
-                      label="Reference image"
-                      value={formState.image?.name ?? "Not added"}
+                      label="Selected photos"
+                      value={
+                        formState.images.length > 0
+                          ? `${formState.images.length} photo${formState.images.length === 1 ? "" : "s"}`
+                          : "Not added"
+                      }
                     />
                   </div>
+
+                  <ImagePreviewGrid
+                    files={formState.images}
+                    onRemove={(index) =>
+                      updateField(
+                        "images",
+                        formState.images.filter((_, currentIndex) => currentIndex !== index)
+                      )
+                    }
+                    className="mt-4"
+                  />
                 </CardContent>
 
                 <CardFooter className="items-center justify-between gap-3">
