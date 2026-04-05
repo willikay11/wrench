@@ -10,6 +10,7 @@ from app.core.supabase import get_supabase
 class CurrentUser(TypedDict):
     id: str
     email: str
+    access_token: str
 
 
 bearer = HTTPBearer()
@@ -26,7 +27,7 @@ async def get_current_user(
     """
     token = credentials.credentials
 
-    supabase = get_supabase()
+    supabase = get_supabase(token)
 
     # We use get_user() not decode the JWT ourselves —
     # Supabase validates the signature and expiry for us
@@ -41,4 +42,5 @@ async def get_current_user(
     return {
         "id": response.user.id,
         "email": response.user.email or "",
+        "access_token": token,
     }

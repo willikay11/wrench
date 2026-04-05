@@ -4,19 +4,33 @@ import { POST } from "./route"
 
 const mockSignInWithPassword = vi.fn()
 const mockCookiesGetAll = vi.fn(() => [])
+const mockCookiesSet = vi.fn()
+let capturedSetAll:
+  | ((cookiesToSet: Array<{ name: string; value: string; options?: { path?: string } }>) => void)
+  | null = null
 
 vi.mock("next/headers", () => ({
   cookies: () => ({
     getAll: mockCookiesGetAll,
+    set: mockCookiesSet,
   }),
 }))
 
 vi.mock("@supabase/ssr", () => ({
-  createServerClient: () => ({
-    auth: {
-      signInWithPassword: mockSignInWithPassword,
-    },
-  }),
+  createServerClient: (_url: string, _key: string, options: {
+    cookies: {
+      getAll: () => unknown[]
+      setAll: (cookiesToSet: Array<{ name: string; value: string; options?: { path?: string } }>) => void
+    }
+  }) => {
+    capturedSetAll = options.cookies.setAll
+
+    return {
+      auth: {
+        signInWithPassword: mockSignInWithPassword,
+      },
+    }
+  },
 }))
 
 function makeRequest(body: object) {
@@ -35,18 +49,18 @@ const validBody = {
 describe("POST /api/auth/login", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    capturedSetAll = null
     mockCookiesGetAll.mockReturnValue([])
   })
 
   describe("success", () => {
-    it("returns 200 when credentials are correct", async () => {
+    it("redirects to /dashboard when credentials are correct", async () => {
       mockSignInWithPassword.mockResolvedValue({ error: null })
 
       const res = await POST(makeRequest(validBody))
-      const data = await res.json()
 
-      expect(res.status).toBe(200)
-      expect(data.success).toBe(true)
+      expect(res.status).toBe(303)
+      expect(res.headers.get("location")).toBe("http://localhost/dashboard")
     })
 
     it("calls Supabase with correct email and password", async () => {
@@ -58,6 +72,26 @@ describe("POST /api/auth/login", () => {
         email: "will@wrench.app",
         password: "Wrench123",
       })
+    })
+
+    it("persists auth cookies on successful login", async () => {
+      mockSignInWithPassword.mockImplementation(async () => {
+        capturedSetAll?.([
+          { name: "sb-access-token", value: "access-token", options: { path: "/" } },
+          { name: "sb-refresh-token", value: "refresh-token", options: { path: "/" } },
+        ])
+
+        return { error: null }
+      })
+
+      const res = await POST(makeRequest(validBody))
+      const setCookieHeader = res.headers.get("set-cookie") ?? ""
+
+      expect(res.status).toBe(303)
+      expect(res.headers.get("location")).toBe("http://localhost/dashboard")
+      expect(mockCookiesSet).toHaveBeenCalledTimes(2)
+      expect(setCookieHeader).toContain("sb-access-token=access-token")
+      expect(setCookieHeader).toContain("sb-refresh-token=refresh-token")
     })
   })
 

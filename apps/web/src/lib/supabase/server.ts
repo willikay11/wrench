@@ -22,9 +22,14 @@ export async function createClient() {
         },
         setAll(cookiesToSet: CookieToSet[]) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
+            cookiesToSet.forEach(({ name, value, options }) => {
+              const cookieOptions = {
+                ...options,
+                path: options?.path ?? "/",
+              }
+
+              cookieStore.set(name, value, cookieOptions)
+            })
           } catch {}
         },
       },

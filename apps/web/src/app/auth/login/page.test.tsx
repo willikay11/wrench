@@ -8,7 +8,7 @@ const mockPush = vi.fn()
 const mockReplace = vi.fn()
 const mockRefresh = vi.fn()
 const mockSearchParamsGet = vi.fn()
-const mockSignInWithPassword = vi.fn()
+const mockFetch = vi.fn()
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -31,13 +31,11 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }))
 
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({
-    auth: {
-      signInWithPassword: mockSignInWithPassword,
-    },
-  }),
-}))
+vi.stubGlobal("fetch", mockFetch)
+vi.stubGlobal("location", {
+  ...window.location,
+  href: "http://localhost:3000/auth/login",
+})
 
 vi.mock("sonner", () => ({
   toast: {
@@ -65,6 +63,13 @@ describe("LoginPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockSearchParamsGet.mockReturnValue(null)
+    mockFetch.mockResolvedValue({
+      ok: true,
+      redirected: false,
+      url: "http://localhost:3000/dashboard",
+      json: vi.fn().mockResolvedValue({ success: true }),
+    })
+    window.location.href = "http://localhost:3000/auth/login"
     render(<LoginPage />)
   })
 
@@ -132,51 +137,61 @@ describe("LoginPage", () => {
     it("does not call fetch when validation fails", async () => {
       const user = userEvent.setup()
       await user.click(screen.getByRole("button", { name: /sign in/i }))
-      expect(mockSignInWithPassword).not.toHaveBeenCalled()
+      expect(mockFetch).not.toHaveBeenCalled()
     })
   })
 
   describe("form submission", () => {
-    it("calls supabase signInWithPassword on valid submit", async () => {
-      mockSignInWithPassword.mockResolvedValue({ error: null })
-
+    it("calls the login API on valid submit", async () => {
       const user = await fillForm()
       await user.click(screen.getByRole("button", { name: /sign in/i }))
 
       await waitFor(() => {
-        expect(mockSignInWithPassword).toHaveBeenCalled()
+        expect(mockFetch).toHaveBeenCalled()
       })
     })
 
-    it("sends email and password to supabase", async () => {
-      mockSignInWithPassword.mockResolvedValue({ error: null })
-
+    it("sends email and password to the login API", async () => {
       const user = await fillForm()
       await user.click(screen.getByRole("button", { name: /sign in/i }))
 
       await waitFor(() => {
-        expect(mockSignInWithPassword).toHaveBeenCalledWith({
-          email: "will@wrench.app",
-          password: "Wrench123",
-        })
+        expect(mockFetch).toHaveBeenCalledWith(
+          "/api/auth/login",
+          expect.objectContaining({
+            method: "POST",
+            credentials: "include",
+            body: JSON.stringify({
+              email: "will@wrench.app",
+              password: "Wrench123",
+              next: "/dashboard",
+            }),
+          })
+        )
       })
     })
 
-    it("redirects to / on success", async () => {
-      mockSignInWithPassword.mockResolvedValue({ error: null })
+    it("redirects to /dashboard on success", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        redirected: true,
+        url: "http://localhost:3000/dashboard",
+        json: vi.fn().mockResolvedValue({ success: true }),
+      })
 
       const user = await fillForm()
       await user.click(screen.getByRole("button", { name: /sign in/i }))
 
       await waitFor(() => {
-        expect(mockReplace).toHaveBeenCalledWith("/")
+        expect(window.location.href).toBe("http://localhost:3000/dashboard")
       })
     })
 
     it("shows error toast on wrong credentials", async () => {
       const { toast } = await import("sonner")
-      mockSignInWithPassword.mockResolvedValue({
-        error: { message: "Invalid login credentials" },
+      mockFetch.mockResolvedValue({
+        ok: false,
+        json: vi.fn().mockResolvedValue({ error: "Invalid login credentials" }),
       })
 
       const user = await fillForm()
@@ -189,8 +204,9 @@ describe("LoginPage", () => {
 
     it("shows error toast on email not confirmed", async () => {
       const { toast } = await import("sonner")
-      mockSignInWithPassword.mockResolvedValue({
-        error: { message: "Email not confirmed" },
+      mockFetch.mockResolvedValue({
+        ok: false,
+        json: vi.fn().mockResolvedValue({ error: "Email not confirmed" }),
       })
 
       const user = await fillForm()
@@ -203,7 +219,7 @@ describe("LoginPage", () => {
 
     it("disables the button while request is in flight", async () => {
       let resolveRequest: (value: unknown) => void
-      mockSignInWithPassword.mockImplementation(
+      mockFetch.mockImplementation(
         () =>
           new Promise((resolve) => {
             resolveRequest = resolve
@@ -219,13 +235,15 @@ describe("LoginPage", () => {
       })
 
       resolveRequest!({
-        error: null,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
       })
     })
 
     it("re-enables the button after a failed request", async () => {
-      mockSignInWithPassword.mockResolvedValue({
-        error: { message: "Invalid login credentials" },
+      mockFetch.mockResolvedValue({
+        ok: false,
+        json: vi.fn().mockResolvedValue({ error: "Invalid login credentials" }),
       })
 
       const user = await fillForm()
