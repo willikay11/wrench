@@ -6,6 +6,7 @@ import { formatDistanceToNow } from "date-fns"
 import type { Build } from "@/lib/api/builds"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import Image from "next/image"
 
 interface BuildCardProps {
   build: Build
@@ -58,7 +59,7 @@ export function BuildCard({ build }: BuildCardProps) {
 
         <div className="w-full h-[72px] bg-secondary rounded-md flex items-center justify-center border border-border/50">
           {build.image_url ? (
-            <img
+            <Image
               src={build.image_url}
               alt={build.title}
               className="w-full h-full object-cover rounded-md"
