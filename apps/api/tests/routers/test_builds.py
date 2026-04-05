@@ -125,6 +125,7 @@ class TestListBuilds:
         assert "id" in build
         assert "user_id" in build
         assert "title" in build
+        assert "car" in build
         assert "status" in build
         assert "created_at" in build
         assert "updated_at" in build
@@ -135,7 +136,7 @@ class TestListBuilds:
 class TestCreateBuild:
     VALID_PAYLOAD = {
         "title": "E30 K24 swap",
-        "donor_car": "1991 BMW E30 325i",
+        "car": "1991 BMW E30 325i",
         "engine_swap": "Honda K24A2",
         "goals": ["daily", "track"],
     }
@@ -165,6 +166,7 @@ class TestCreateBuild:
         )
 
         assert res.json()["title"] == "E30 K24 swap"
+        assert res.json()["car"] == "1991 BMW E30 325i"
         assert res.json()["user_id"] == MOCK_USER["id"]
 
     def test_sets_user_id_from_token_not_payload(self, mock_supabase):
@@ -327,7 +329,7 @@ class TestUpdateBuild:
 
         payload = {
             "title": "Updated title",
-            "donor_car": "New donor",
+            "car": "New donor",
             "engine_swap": "New engine",
             "goals": ["new goal"],
             "status": "completed",  # This should be ignored
@@ -337,7 +339,7 @@ class TestUpdateBuild:
         updated_build = {
             **MOCK_BUILD,
             "title": payload["title"],
-            "donor_car": payload["donor_car"],
+            "donor_car": payload["car"],
             "engine_swap": payload["engine_swap"],
             "goals": payload["goals"],
         }
@@ -354,7 +356,7 @@ class TestUpdateBuild:
 
         assert res.status_code == 200
         assert res.json()["title"] == "Updated title"
-        assert res.json()["donor_car"] == "New donor"
+        assert res.json()["car"] == "New donor"
         assert res.json()["engine_swap"] == "New engine"
         assert res.json()["goals"] == ["new goal"]
         assert res.json()["status"] == "planning"  # Unchanged

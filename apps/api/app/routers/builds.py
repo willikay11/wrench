@@ -61,7 +61,7 @@ async def create_build(
         supabase.table("builds")
         .insert({
             "title": payload.title,
-            "donor_car": payload.donor_car,
+            "donor_car": payload.car,
             "engine_swap": payload.engine_swap,
             "goals": payload.goals,
             "user_id": user["id"],
@@ -114,7 +114,7 @@ async def update_build(
 ) -> dict[str, Any]:
     """
     Updates an existing build by ID, but only if it belongs to the authenticated user.
-    The client can update the title, donor_car, engine_swap, and goals.
+    The client can update the title, car, optional engine swap, and goals.
     """
     supabase = get_supabase(user["access_token"])
 
@@ -139,7 +139,7 @@ async def update_build(
         supabase.table("builds")
         .update({
             "title": payload.title,
-            "donor_car": payload.donor_car,
+            "donor_car": payload.car,
             "engine_swap": payload.engine_swap,
             "goals": payload.goals,
         })

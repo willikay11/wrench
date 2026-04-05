@@ -4,7 +4,9 @@ import type { Database } from "@/types/database"
 
 type BuildRow = Database["public"]["Tables"]["builds"]["Row"]
 
-export type Build = BuildRow & {
+export type Build = Omit<BuildRow, "donor_car"> & {
+  car?: string | null
+  donor_car?: string | null
   parts_total?: number
   parts_sourced?: number
 }
