@@ -1,3 +1,4 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,7 +10,21 @@ class Settings(BaseSettings):
 
     # Supabase
     supabase_url: str
-    supabase_service_role_key: str
+    supabase_service_role_key: str = Field(
+        validation_alias=AliasChoices(
+            "SUPABASE_SERVICE_ROLE_KEY",
+            "SERVICE_ROLE_KEY",
+        ),
+    )
+    supabase_anon_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "SUPABASE_ANON_KEY",
+            "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+            "ANON_KEY",
+            "PUBLISHABLE_KEY",
+        ),
+    )
 
     # Anthropic
     anthropic_api_key: str

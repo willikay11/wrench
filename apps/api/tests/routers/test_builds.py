@@ -474,3 +474,23 @@ class TestUploadBuildImage:
 
         assert res.status_code == 400
         assert res.json()["detail"] == "Uploaded file must be an image"
+
+    def test_returns_storage_error_detail_when_upload_fails(self, mock_supabase):
+        mock_table = mock_supabase.return_value.table.return_value
+        mock_table.select.return_value \
+            .eq.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = MOCK_BUILD
+
+        mock_bucket = mock_supabase.return_value.storage.from_.return_value
+        mock_bucket.upload.side_effect = Exception("Bucket not found")
+
+        res = client.post(
+            "/v1/builds/build-001/image",
+            headers=AUTH_HEADER,
+            files={"image": ("build.jpg", b"fake-image-bytes", "image/jpeg")},
+        )
+
+        assert res.status_code == 500
+        assert "Bucket not found" in res.json()["detail"]

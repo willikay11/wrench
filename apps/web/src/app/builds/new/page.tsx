@@ -281,10 +281,10 @@ export default function NewBuildPage() {
             {currentStep === 1 ? (
               <>
                 <CardHeader>
-                  <CardTitle className="text-3xl font-semibold tracking-tight">
+                  <CardTitle className="text-xl font-semibold tracking-tight">
                     Tell us about your build
                   </CardTitle>
-                  <CardDescription className="text-base">
+                  <CardDescription className="text-sm">
                     Start with the basics — you can always update this later.
                   </CardDescription>
                 </CardHeader>
@@ -366,10 +366,10 @@ export default function NewBuildPage() {
             ) : currentStep === 2 ? (
               <>
                 <CardHeader>
-                  <CardTitle className="text-3xl font-semibold tracking-tight">
+                  <CardTitle className="text-xl font-semibold tracking-tight">
                     Upload a reference image
                   </CardTitle>
-                  <CardDescription className="text-base">
+                  <CardDescription className="text-sm">
                     Wrench will use AI to identify your car and spot visible mods.
                   </CardDescription>
                 </CardHeader>
@@ -450,10 +450,10 @@ export default function NewBuildPage() {
             ) : (
               <>
                 <CardHeader>
-                  <CardTitle className="text-3xl font-semibold tracking-tight">
+                  <CardTitle className="text-xl font-semibold tracking-tight">
                     Review your build
                   </CardTitle>
-                  <CardDescription className="text-base">
+                  <CardDescription className="text-sm">
                     Confirm the details before creating it.
                   </CardDescription>
                 </CardHeader>
