@@ -33,7 +33,7 @@ describe("ImageUpload", () => {
     expect(screen.getByText(/jpg, png or webp/i)).toBeInTheDocument()
   })
 
-  it("shows selected images in a grid immediately", () => {
+  it("shows selected images in a grid immediately", async () => {
     render(<TestWrapper />)
 
     const input = screen.getByLabelText(/upload build images/i)
@@ -42,8 +42,8 @@ describe("ImageUpload", () => {
 
     fireEvent.change(input, { target: { files: [first, second] } })
 
-    expect(screen.getByAltText(/preview of front\.jpg/i)).toBeInTheDocument()
-    expect(screen.getByAltText(/preview of rear\.png/i)).toBeInTheDocument()
+    expect(await screen.findByAltText(/preview of front\.jpg/i)).toBeInTheDocument()
+    expect(await screen.findByAltText(/preview of rear\.png/i)).toBeInTheDocument()
   })
 
   it("allows deleting a selected image", async () => {
@@ -56,6 +56,8 @@ describe("ImageUpload", () => {
     const second = new File(["rear"], "rear.png", { type: "image/png" })
 
     fireEvent.change(input, { target: { files: [first, second] } })
+
+    expect(await screen.findByAltText(/preview of front\.jpg/i)).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: /remove front\.jpg/i }))
 
     expect(screen.queryByAltText(/preview of front\.jpg/i)).not.toBeInTheDocument()

@@ -17,21 +17,32 @@ export function ImagePreviewGrid({
   onRemove,
   className,
 }: ImagePreviewGridProps) {
-  const previews = React.useMemo(
-    () =>
-      files.map((file, index) => ({
-        index,
-        file,
-        url: URL.createObjectURL(file),
-      })),
-    [files]
-  )
+  const [previews, setPreviews] = React.useState<
+    Array<{
+      index: number
+      file: File
+      url: string
+    }>
+  >([])
 
   React.useEffect(() => {
-    return () => {
-      previews.forEach((preview) => URL.revokeObjectURL(preview.url))
+    if (typeof window === "undefined" || files.length === 0) {
+      setPreviews([])
+      return
     }
-  }, [previews])
+
+    const nextPreviews = files.map((file, index) => ({
+      index,
+      file,
+      url: URL.createObjectURL(file),
+    }))
+
+    setPreviews(nextPreviews)
+
+    return () => {
+      nextPreviews.forEach((preview) => URL.revokeObjectURL(preview.url))
+    }
+  }, [files])
 
   if (previews.length === 0) {
     return null
