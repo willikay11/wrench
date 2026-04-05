@@ -22,7 +22,7 @@ export default async function DashboardPage() {
     <div className="min-h-screen bg-background">
 
       <nav className="border-b border-border bg-card">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
           <Logo variant="full" size="md" theme="light" />
           <div className="flex items-center gap-3">
             <Link href="/builds/new">
@@ -37,7 +37,7 @@ export default async function DashboardPage() {
         </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
+      <main className="mx-auto max-w-7xl px-4 py-8">
 
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-medium">My builds</h1>
@@ -50,7 +50,7 @@ export default async function DashboardPage() {
             <ErrorState message={error} />
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {builds.length === 0 ? (
               <EmptyState />
             ) : (
