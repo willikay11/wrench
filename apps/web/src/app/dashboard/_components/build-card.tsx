@@ -1,12 +1,12 @@
-// apps/web/src/app/dashboard/_components/build-card.tsx
+// apps/web/src/components/build/BuildCard.tsx
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { formatDistanceToNow } from "date-fns"
-import type { Build } from "@/lib/api/builds"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import Image from "next/image"
+import type { Build } from "@/lib/api/builds"
 
 interface BuildCardProps {
   build: Build
@@ -28,13 +28,21 @@ const statusConfig = {
 } as const
 
 export function BuildCard({ build }: BuildCardProps) {
-  const status = statusConfig[build.status as keyof typeof statusConfig] ?? statusConfig.planning
+  const status =
+    statusConfig[build.status as keyof typeof statusConfig] ??
+    statusConfig.planning
+
   const updatedAt = formatDistanceToNow(new Date(build.updated_at), {
     addSuffix: true,
   })
 
+  const progressPercent =
+    (build.parts_total ?? 0) > 0
+      ? Math.round(((build.parts_sourced ?? 0) / (build.parts_total ?? 0)) * 100)
+      : 0
+
   return (
-    <Link href={`/builds/${build.id}`}>
+    <Link href={`/builds/${build.id}`} className="block h-full">
       <div className="bg-card border border-border rounded-lg p-4 hover:border-border/80 transition-colors cursor-pointer h-full flex flex-col gap-3">
 
         <div className="flex items-start justify-between gap-2">
@@ -51,27 +59,60 @@ export function BuildCard({ build }: BuildCardProps) {
           </div>
           <Badge
             variant="outline"
-            className={cn("text-[10px] shrink-0 font-medium", status.className)}
+            className={cn(
+              "text-[10px] shrink-0 font-medium",
+              status.className
+            )}
           >
             {status.label}
           </Badge>
         </div>
 
-        <div className="w-full h-[72px] bg-secondary rounded-md flex items-center justify-center border border-border/50">
+        <div className="w-full h-[72px] bg-secondary rounded-md flex items-center justify-center border border-border/50 overflow-hidden">
           {build.image_url ? (
             <Image
               src={build.image_url}
               alt={build.title}
-              className="w-full h-full object-cover rounded-md"
+              width={300}
+              height={72}
+              className="w-full h-full object-cover"
             />
           ) : (
             <CarPlaceholder />
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-auto">
-          <MetaItem label="Goals" value={build?.goals?.join(", ") || "None set"} />
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+          <MetaItem
+            label="Goals"
+            value={build.goals?.join(", ") || "None set"}
+          />
           <MetaItem label="Updated" value={updatedAt} />
+          <MetaItem
+            label="Parts"
+            value={
+              (build.parts_total ?? 0) > 0
+                ? `${build.parts_sourced ?? 0} of ${build.parts_total ?? 0} sourced`
+                : "None added yet"
+            }
+          />
+        </div>
+
+        <div className="mt-auto space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground">
+              Progress
+            </span>
+            <span className="text-[10px] font-medium text-muted-foreground">
+              {progressPercent}%
+            </span>
+          </div>
+          <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden">
+            <div
+              className="h-full bg-brand rounded-full transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
         </div>
 
       </div>
@@ -83,7 +124,9 @@ function MetaItem({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <span className="text-[10px] text-muted-foreground">{label} </span>
-      <span className="text-[10px] font-medium text-muted-foreground">{value}</span>
+      <span className="text-[10px] font-medium text-muted-foreground">
+        {value}
+      </span>
     </div>
   )
 }

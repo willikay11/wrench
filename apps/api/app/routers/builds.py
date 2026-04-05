@@ -9,6 +9,16 @@ from app.schemas.builds import BuildCreate, BuildResponse
 router = APIRouter()
 
 
+def with_part_counts(build: dict[str, Any]) -> dict[str, Any]:
+    build_data = dict(build)
+    parts = cast(list[dict[str, Any]], build_data.pop("parts", []) or [])
+    build_data["parts_total"] = len(parts)
+    build_data["parts_sourced"] = sum(
+        1 for part in parts if part.get("status") in ("sourced", "installed")
+    )
+    return build_data
+
+
 # ── GET /v1/builds ────────────────────────────────────────────────────────
 @router.get("/", response_model=list[BuildResponse])
 async def get_builds(user: CurrentUser = Depends(get_current_user)) -> list[dict[str, Any]]:
@@ -21,13 +31,18 @@ async def get_builds(user: CurrentUser = Depends(get_current_user)) -> list[dict
 
     response = (
         supabase.table("builds")
-        .select("*")
+        .select("*, parts(status)")
         .eq("user_id", user["id"])
         .order("created_at", desc=True)
         .execute()
     )
 
-    return cast(list[dict[str, Any]], response.data)
+    builds = [
+        with_part_counts(build)
+        for build in cast(list[dict[str, Any]], response.data or [])
+    ]
+
+    return builds
 
 #─ POST /v1/builds ────────────────────────────────────────────────────────
 @router.post("/", response_model=BuildResponse, status_code=status.HTTP_201_CREATED)
@@ -60,7 +75,7 @@ async def create_build(
             detail="Failed to create build",
         )
 
-    return cast(dict[str, Any], response.data[0])
+    return with_part_counts(cast(dict[str, Any], response.data[0]))
 
 
 #── GET /v1/builds/{id} ────────────────────────────────────────────────────────
@@ -74,7 +89,7 @@ async def get_build(build_id: str, user: CurrentUser = Depends(get_current_user)
 
     response = (
         supabase.table("builds")
-        .select("*")
+        .select("*, parts(status)")
         .eq("user_id", user["id"])
         .eq("id", build_id)
         .single()
@@ -87,7 +102,7 @@ async def get_build(build_id: str, user: CurrentUser = Depends(get_current_user)
             detail="Build not found",
         )
 
-    return cast(dict[str, Any], response.data)
+    return with_part_counts(cast(dict[str, Any], response.data))
 
 
 # ── PUT /v1/builds/{id} ────────────────────────────────────────────────────────
@@ -138,7 +153,7 @@ async def update_build(
             detail="Failed to update build",
         )
 
-    return cast(dict[str, Any], response.data[0])
+    return with_part_counts(cast(dict[str, Any], response.data[0]))
 
 # ── DELETE /v1/builds/{id} ────────────────────────────────────────────────────────
 @router.delete("/{build_id}", status_code=status.HTTP_204_NO_CONTENT)
