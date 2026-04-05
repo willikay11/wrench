@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { Tick02Icon } from "@hugeicons/core-free-icons"
 import { toast } from "sonner"
 
 import { Logo } from "@/components/brand/logo"
@@ -101,6 +103,9 @@ export default function NewBuildPage() {
   const isStepOneValid = React.useMemo(() => {
     return Object.keys(validateStepOne(formState)).length === 0
   }, [formState])
+
+  const isStepOneComplete = isStepOneValid
+  const isStepTwoComplete = Boolean(formState.image) || currentStep > 2
 
   function updateField<K extends keyof FormState>(field: K, value: FormState[K]) {
     const nextState = {
@@ -218,35 +223,33 @@ export default function NewBuildPage() {
         <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start">
           <aside className="space-y-3">
             {STEPS.map((step) => {
-              const isActive = step.id === currentStep
-              const isComplete = step.id < currentStep
+              const isComplete =
+                step.id === 1
+                  ? isStepOneComplete
+                  : step.id === 2
+                    ? isStepTwoComplete
+                    : false
+              const isActive = step.id === currentStep && !isComplete
 
               return (
                 <div key={step.id} className="flex gap-3">
                   <div className="flex flex-col items-center">
                     <div
                       className={cn(
-                        "flex size-9 items-center justify-center rounded-full border text-sm font-semibold",
+                        "flex size-9 items-center justify-center rounded-full border text-sm font-semibold transition-colors",
                         isComplete
-                          ? "border-success bg-success text-white"
+                          ? "border-emerald-600 bg-emerald-600 text-white"
                           : isActive
                             ? "border-brand bg-brand text-white"
                             : "border-border bg-card text-muted-foreground"
                       )}
                     >
                       {isComplete ? (
-                        <svg
-                          viewBox="0 0 16 16"
+                        <HugeiconsIcon
+                          icon={Tick02Icon}
+                          strokeWidth={2.25}
                           className="size-4"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
-                        </svg>
+                        />
                       ) : (
                         step.id
                       )}
@@ -254,8 +257,8 @@ export default function NewBuildPage() {
                     {step.id < STEPS.length && (
                       <div
                         className={cn(
-                          "mt-2 h-10 w-px",
-                          isComplete ? "bg-success/50" : "bg-border"
+                          "mt-2 h-10 w-px transition-colors",
+                          isComplete ? "bg-emerald-600/40" : "bg-border"
                         )}
                       />
                     )}
