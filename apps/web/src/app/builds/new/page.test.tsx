@@ -50,7 +50,7 @@ describe("NewBuildPage", () => {
       screen.getByText(/wrench will use ai to identify your car/i)
     ).toBeInTheDocument()
     expect(
-      screen.getByText(/drop a photo here or click to browse/i)
+      screen.getByText(/drop photos here or click to browse/i)
     ).toBeInTheDocument()
   })
 })
