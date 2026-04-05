@@ -12,5 +12,5 @@ export interface BuildsResponse {
 }
 
 export async function getBuilds(): Promise<Build[]> {
-  return apiFetch<Build[]>("/v1/builds/")
+    return await apiFetch<Build[]>("/v1/builds/")
 }

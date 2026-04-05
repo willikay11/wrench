@@ -21,7 +21,7 @@ export async function apiFetch<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const token = await getAuthToken()
-
+  
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
@@ -30,6 +30,8 @@ export async function apiFetch<T>(
       ...options.headers,
     },
   })
+
+  console.log(`API ${options.method ?? "GET"} ${path} - Status: ${res.status}`)
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: "Unknown error" }))

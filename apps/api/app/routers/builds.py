@@ -17,7 +17,7 @@ async def get_builds(user: CurrentUser = Depends(get_current_user)) -> list[dict
     The user_id filter is enforced here AND by RLS in Postgres —
     defence in depth means a bug in one layer doesn't expose data.
     """
-    supabase = get_supabase()
+    supabase = get_supabase(user["access_token"])
 
     response = (
         supabase.table("builds")
@@ -40,7 +40,7 @@ async def create_build(
     user_id is set server-side from the verified JWT —
     the client never sends their own user_id.
     """
-    supabase = get_supabase()
+    supabase = get_supabase(user["access_token"])
 
     response = (
         supabase.table("builds")
@@ -70,7 +70,7 @@ async def get_build(build_id: str, user: CurrentUser = Depends(get_current_user)
     Returns a single build by ID, but only if it belongs to the authenticated user.
     This is used by the frontend when navigating to /builds/{id} to fetch the build details.
     """
-    supabase = get_supabase()
+    supabase = get_supabase(user["access_token"])
 
     response = (
         supabase.table("builds")
@@ -101,7 +101,7 @@ async def update_build(
     Updates an existing build by ID, but only if it belongs to the authenticated user.
     The client can update the title, donor_car, engine_swap, and goals.
     """
-    supabase = get_supabase()
+    supabase = get_supabase(user["access_token"])
 
     # First, verify the build exists and belongs to the user
     existing = (
@@ -147,7 +147,7 @@ async def delete_build(build_id: str, user: CurrentUser = Depends(get_current_us
     Deletes a build by ID, but only if it belongs to the authenticated user.
     This also cascades to delete related parts and conversations via RLS policies.
     """
-    supabase = get_supabase()
+    supabase = get_supabase(user["access_token"])
 
     # First, verify the build exists and belongs to the user
     existing = (
