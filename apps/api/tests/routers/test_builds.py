@@ -402,3 +402,73 @@ class TestDeleteBuild:
     def test_returns_401_without_auth_header(self):
         res = client.delete("/v1/builds/build-001")
         assert res.status_code == 401
+
+
+# ── POST /v1/builds/{id}/image ────────────────────────────────────────────
+class TestUploadBuildImage:
+    def test_uploads_image_updates_build_and_returns_storage_url(self, mock_supabase):
+        mock_table = mock_supabase.return_value.table.return_value
+        mock_table.select.return_value \
+            .eq.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = MOCK_BUILD
+
+        image_url = "https://example.supabase.co/storage/v1/object/public/build-images/00000000-0000-0000-0000-000000000001/build-001.jpg"
+        mock_bucket = mock_supabase.return_value.storage.from_.return_value
+        mock_bucket.get_public_url.return_value = image_url
+
+        mock_table.update.return_value \
+            .eq.return_value \
+            .eq.return_value \
+            .execute.return_value.data = [{**MOCK_BUILD, "image_url": image_url}]
+
+        res = client.post(
+            "/v1/builds/build-001/image",
+            headers=AUTH_HEADER,
+            files={"image": ("build.jpg", b"fake-image-bytes", "image/jpeg")},
+        )
+
+        assert res.status_code == 201
+        assert res.json() == {"image_url": image_url}
+        mock_bucket.upload.assert_called_once_with(
+            f"{MOCK_USER['id']}/build-001.jpg",
+            b"fake-image-bytes",
+            file_options={
+                "content-type": "image/jpeg",
+                "upsert": "true",
+            },
+        )
+
+    def test_returns_404_when_build_not_found(self, mock_supabase):
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = None
+
+        res = client.post(
+            "/v1/builds/build-001/image",
+            headers=AUTH_HEADER,
+            files={"image": ("build.jpg", b"fake-image-bytes", "image/jpeg")},
+        )
+
+        assert res.status_code == 404
+
+    def test_rejects_non_image_uploads(self, mock_supabase):
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = MOCK_BUILD
+
+        res = client.post(
+            "/v1/builds/build-001/image",
+            headers=AUTH_HEADER,
+            files={"image": ("notes.txt", b"not-an-image", "text/plain")},
+        )
+
+        assert res.status_code == 400
+        assert res.json()["detail"] == "Uploaded file must be an image"

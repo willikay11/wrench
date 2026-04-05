@@ -1,10 +1,10 @@
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.core.dependencies import CurrentUser, get_current_user
 from app.core.supabase import get_supabase
-from app.schemas.builds import BuildCreate, BuildResponse
+from app.schemas.builds import BuildCreate, BuildResponse, BuildImageResponse
 
 router = APIRouter()
 
@@ -193,3 +193,78 @@ async def delete_build(build_id: str, user: CurrentUser = Depends(get_current_us
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete build",
         )
+
+# ── POST /v1/builds/{id}/image ────────────────────────────────────────────────────────
+@router.post("/{build_id}/image", response_model=BuildImageResponse, status_code=status.HTTP_201_CREATED)
+async def upload_build_image(
+    build_id: str,
+    image: UploadFile = File(...),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Upload an image to the `build-images` bucket, update the build record,
+    and return the stored public URL.
+    """
+    supabase = get_supabase(user["access_token"])
+
+    existing = (
+        supabase.table("builds")
+        .select("*")
+        .eq("user_id", user["id"])
+        .eq("id", build_id)
+        .single()
+        .execute()
+    )
+
+    if not existing.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Build not found",
+        )
+
+    if image.content_type and not image.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file must be an image",
+        )
+
+    image_bytes = await image.read()
+    if not image_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty",
+        )
+
+    storage_path = f"{user['id']}/{build_id}.jpg"
+
+    try:
+        supabase.storage.from_("build-images").upload(
+            storage_path,
+            image_bytes,
+            file_options={
+                "content-type": image.content_type or "image/jpeg",
+                "upsert": "true",
+            },
+        )
+        image_url = supabase.storage.from_("build-images").get_public_url(storage_path)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upload build image",
+        ) from exc
+
+    update_response = (
+        supabase.table("builds")
+        .update({"image_url": image_url})
+        .eq("user_id", user["id"])
+        .eq("id", build_id)
+        .execute()
+    )
+
+    if not update_response.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update build image",
+        )
+
+    return {"image_url": image_url}

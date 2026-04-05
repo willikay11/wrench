@@ -27,3 +27,7 @@ class BuildResponse(BaseModel):
     updated_at: datetime
     parts_total: int = 0
     parts_sourced: int = 0
+
+class BuildImageResponse(BaseModel):
+    """Shape of data returned to the client after uploading a build image."""
+    image_url: str
