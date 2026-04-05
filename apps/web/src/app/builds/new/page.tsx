@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { Tick02Icon } from "@hugeicons/core-free-icons"
 import { toast } from "sonner"
 
 import { Logo } from "@/components/brand/logo"
@@ -101,6 +103,9 @@ export default function NewBuildPage() {
   const isStepOneValid = React.useMemo(() => {
     return Object.keys(validateStepOne(formState)).length === 0
   }, [formState])
+
+  const isStepOneComplete = isStepOneValid
+  const isStepTwoComplete = Boolean(formState.image) || currentStep > 2
 
   function updateField<K extends keyof FormState>(field: K, value: FormState[K]) {
     const nextState = {
@@ -218,29 +223,51 @@ export default function NewBuildPage() {
         <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start">
           <aside className="space-y-3">
             {STEPS.map((step) => {
-              const isActive = step.id === currentStep
-              const isComplete = step.id < currentStep
+              const isComplete =
+                step.id === 1
+                  ? isStepOneComplete
+                  : step.id === 2
+                    ? isStepTwoComplete
+                    : false
+              const isActive = step.id === currentStep && !isComplete
 
               return (
                 <div key={step.id} className="flex gap-3">
                   <div className="flex flex-col items-center">
                     <div
                       className={cn(
-                        "flex size-9 items-center justify-center rounded-full border text-sm font-semibold",
-                        isActive || isComplete
-                          ? "border-brand bg-brand text-white"
-                          : "border-border bg-card text-muted-foreground"
+                        "flex size-9 items-center justify-center rounded-full border text-sm font-semibold transition-colors",
+                        isComplete
+                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          : isActive
+                            ? "border-brand bg-brand text-white"
+                            : "border-border bg-card text-muted-foreground"
                       )}
                     >
-                      {step.id}
+                      {isComplete ? (
+                        <HugeiconsIcon
+                          icon={Tick02Icon}
+                          strokeWidth={2.25}
+                          className="size-4"
+                        />
+                      ) : (
+                        step.id
+                      )}
                     </div>
                     {step.id < STEPS.length && (
-                      <div className="mt-2 h-10 w-px bg-border" />
+                      <div
+                        className={cn(
+                          "mt-2 h-10 w-px transition-colors",
+                          isComplete ? "bg-emerald-600/40" : "bg-border"
+                        )}
+                      />
                     )}
                   </div>
 
                   <div className="pt-1">
-                    <p className="text-base font-semibold">{step.title}</p>
+                    <p className={cn("text-base font-semibold", isActive ? "text-foreground" : "text-foreground/90")}>
+                      {step.title}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {step.description}
                     </p>
@@ -254,10 +281,10 @@ export default function NewBuildPage() {
             {currentStep === 1 ? (
               <>
                 <CardHeader>
-                  <CardTitle className="text-3xl font-semibold tracking-tight">
+                  <CardTitle className="text-xl font-semibold tracking-tight">
                     Tell us about your build
                   </CardTitle>
-                  <CardDescription className="text-base">
+                  <CardDescription className="text-sm">
                     Start with the basics — you can always update this later.
                   </CardDescription>
                 </CardHeader>
@@ -339,46 +366,82 @@ export default function NewBuildPage() {
             ) : currentStep === 2 ? (
               <>
                 <CardHeader>
-                  <CardTitle className="text-3xl font-semibold tracking-tight">
-                    Add a reference image
+                  <CardTitle className="text-xl font-semibold tracking-tight">
+                    Upload a reference image
                   </CardTitle>
-                  <CardDescription className="text-base">
-                    Upload a photo of the car to help us identify the build.
+                  <CardDescription className="text-sm">
+                    Wrench will use AI to identify your car and spot visible mods.
                   </CardDescription>
                 </CardHeader>
 
-                <CardContent>
-                  <Field>
-                    <FieldLabel htmlFor="build-image">Reference image</FieldLabel>
-                    <Input
-                      id="build-image"
-                      type="file"
-                      accept="image/*"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0] ?? null
-                        updateField("image", file)
-                      }}
-                    />
-                    <FieldDescription>
-                      Optional for now — you can upload a photo later.
-                    </FieldDescription>
-                  </Field>
+                <CardContent className="space-y-4">
+                  <input
+                    id="build-image"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null
+                      updateField("image", file)
+                    }}
+                  />
 
-                  {formState.image && (
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      Selected: <span className="font-medium text-foreground">{formState.image.name}</span>
+                  <label
+                    htmlFor="build-image"
+                    className={cn(
+                      "flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-6 py-8 text-center transition-colors",
+                      formState.image
+                        ? "border-brand bg-brand/5"
+                        : "border-border bg-background/40 hover:border-brand/60"
+                    )}
+                  >
+                    <div className="mb-4 flex size-14 items-center justify-center rounded-full border border-border bg-card/80">
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="size-5 text-muted-foreground"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M12 16V7" />
+                        <path d="m8.5 10.5 3.5-3.5 3.5 3.5" />
+                        <path d="M6 17.5a3 3 0 0 1-3-3V14a3 3 0 0 1 3-3h1" />
+                        <path d="M18 17.5a3 3 0 0 0 3-3V14a3 3 0 0 0-3-3h-1" />
+                      </svg>
+                    </div>
+
+                    <p className="text-xl font-medium text-foreground">
+                      {formState.image
+                        ? formState.image.name
+                        : "Drop a photo here or click to browse"}
                     </p>
-                  )}
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      JPG, PNG or WEBP · max 10MB
+                    </p>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={handleContinue}
+                    className="mx-auto block text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    Skip for now — I&apos;ll add a photo later
+                  </button>
                 </CardContent>
 
                 <CardFooter className="items-center justify-between gap-3">
                   <Button type="button" variant="outline" onClick={handleBack}>
                     ← Back
                   </Button>
+                  <p className="text-sm text-muted-foreground">Step 2 of 3</p>
                   <Button
                     type="button"
+                    variant="outline"
                     onClick={handleContinue}
-                    className="bg-brand text-white hover:bg-brand/90"
+                    className="min-w-32"
                   >
                     Continue →
                   </Button>
@@ -387,10 +450,10 @@ export default function NewBuildPage() {
             ) : (
               <>
                 <CardHeader>
-                  <CardTitle className="text-3xl font-semibold tracking-tight">
+                  <CardTitle className="text-xl font-semibold tracking-tight">
                     Review your build
                   </CardTitle>
-                  <CardDescription className="text-base">
+                  <CardDescription className="text-sm">
                     Confirm the details before creating it.
                   </CardDescription>
                 </CardHeader>

@@ -1,3 +1,4 @@
+import logging
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -7,6 +8,7 @@ from app.core.supabase import get_supabase
 from app.schemas.builds import BuildCreate, BuildResponse, BuildImageResponse
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def with_part_counts(build: dict[str, Any]) -> dict[str, Any]:
@@ -248,9 +250,10 @@ async def upload_build_image(
         )
         image_url = supabase.storage.from_("build-images").get_public_url(storage_path)
     except Exception as exc:
+        logger.exception("Failed to upload build image for build %s", build_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to upload build image",
+            detail=f"Failed to upload build image: {exc}",
         ) from exc
 
     update_response = (

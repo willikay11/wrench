@@ -45,7 +45,12 @@ describe("NewBuildPage", () => {
     await user.click(screen.getByRole("checkbox", { name: /track use/i }))
     await user.click(screen.getByRole("button", { name: /continue/i }))
 
-    expect(screen.getByText(/^add a reference image$/i)).toBeInTheDocument()
-    expect(screen.getByText(/upload a photo of the car/i)).toBeInTheDocument()
+    expect(screen.getByText(/^upload a reference image$/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/wrench will use ai to identify your car/i)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/drop a photo here or click to browse/i)
+    ).toBeInTheDocument()
   })
 })
