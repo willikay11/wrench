@@ -1,10 +1,10 @@
 // apps/web/src/app/dashboard/page.tsx
 import Link from "next/link"
 import { getBuilds } from "@/lib/api/builds"
-import { BuildCard } from "./_components/build-card"
-import { StatsBar } from "./_components/stats-bar"
-import { EmptyState } from "./_components/empty-state"
-import { ErrorState } from "./_components/error-state"
+import { BuildCard } from "../../dashboard/_components/build-card"
+import { StatsBar } from "../../dashboard/_components/stats-bar"
+import { EmptyState } from "../../dashboard/_components/empty-state"
+import { ErrorState } from "../../dashboard/_components/error-state"
 import { Logo } from "@/components/brand/logo"
 import { Button } from "@/components/ui/button"
 

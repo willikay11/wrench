@@ -1,7 +1,7 @@
 // apps/web/src/app/dashboard/page.test.tsx
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen } from "@testing-library/react"
-import DashboardPage from "./page"
+import DashboardPage from "../(app)/dashboard/page"
 
 // ── Mock API ───────────────────────────────────────────────────────────────
 vi.mock("@/lib/api/builds", () => ({
