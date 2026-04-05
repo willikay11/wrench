@@ -40,7 +40,6 @@ export async function POST(req: Request) {
           return cookieStore.getAll()
         },
         setAll(cookiesToSet) {
-          console.log("setAll called:", cookiesToSet.map(c => c.name))
           cookiesToSet.forEach(({ name, value, options }) => {
             const opts = { ...options, path: options?.path ?? "/" }
             try { cookieStore.set(name, value, opts) } catch {}

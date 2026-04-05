@@ -30,10 +30,7 @@ export async function createClient() {
 
               cookieStore.set(name, value, cookieOptions)
             })
-            console.log("Cookies set successfully:", cookiesToSet) // add this temporarily
-          } catch (e) {
-            console.error("Failed to set cookies:", e) // add this temporarily
-          }
+          } catch {}
         },
       },
     }

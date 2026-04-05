@@ -9,7 +9,6 @@ const mockReplace = vi.fn()
 const mockRefresh = vi.fn()
 const mockSearchParamsGet = vi.fn()
 const mockFetch = vi.fn()
-const mockLocationReplace = vi.fn()
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -35,7 +34,7 @@ vi.mock("next/link", () => ({
 vi.stubGlobal("fetch", mockFetch)
 vi.stubGlobal("location", {
   ...window.location,
-  replace: mockLocationReplace,
+  href: "http://localhost:3000/auth/login",
 })
 
 vi.mock("sonner", () => ({
@@ -66,9 +65,11 @@ describe("LoginPage", () => {
     mockSearchParamsGet.mockReturnValue(null)
     mockFetch.mockResolvedValue({
       ok: true,
+      redirected: false,
+      url: "http://localhost:3000/dashboard",
       json: vi.fn().mockResolvedValue({ success: true }),
     })
-    mockLocationReplace.mockReset()
+    window.location.href = "http://localhost:3000/auth/login"
     render(<LoginPage />)
   })
 
@@ -163,6 +164,7 @@ describe("LoginPage", () => {
             body: JSON.stringify({
               email: "will@wrench.app",
               password: "Wrench123",
+              next: "/dashboard",
             }),
           })
         )
@@ -170,11 +172,18 @@ describe("LoginPage", () => {
     })
 
     it("redirects to /dashboard on success", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        redirected: true,
+        url: "http://localhost:3000/dashboard",
+        json: vi.fn().mockResolvedValue({ success: true }),
+      })
+
       const user = await fillForm()
       await user.click(screen.getByRole("button", { name: /sign in/i }))
 
       await waitFor(() => {
-        expect(mockLocationReplace).toHaveBeenCalledWith("/dashboard")
+        expect(window.location.href).toBe("http://localhost:3000/dashboard")
       })
     })
 

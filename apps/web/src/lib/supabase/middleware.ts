@@ -10,7 +10,6 @@ type CookieToSet = {
 
 export async function updateSession(request: NextRequest) {
   const cookieValue = request.cookies.get("sb-wrench-auth-token")?.value
-  console.log("Auth cookie value:", cookieValue?.substring(0, 50))
 
   let supabaseResponse = NextResponse.next({ request })
 
@@ -37,8 +36,6 @@ export async function updateSession(request: NextRequest) {
   )
 
   const { data: { user } } = await supabase.auth.getUser()
-
-  console.log("Path:", request.nextUrl.pathname, "| User:", user?.email ?? "null")
 
   const protectedRoutes = ["/builds", "/dashboard", "/profile", "/settings"]
   const isProtected = protectedRoutes.some((route) =>

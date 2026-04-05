@@ -54,14 +54,13 @@ describe("POST /api/auth/login", () => {
   })
 
   describe("success", () => {
-    it("returns 200 when credentials are correct", async () => {
+    it("redirects to /dashboard when credentials are correct", async () => {
       mockSignInWithPassword.mockResolvedValue({ error: null })
 
       const res = await POST(makeRequest(validBody))
-      const data = await res.json()
 
-      expect(res.status).toBe(200)
-      expect(data.success).toBe(true)
+      expect(res.status).toBe(303)
+      expect(res.headers.get("location")).toBe("http://localhost/dashboard")
     })
 
     it("calls Supabase with correct email and password", async () => {
@@ -88,7 +87,8 @@ describe("POST /api/auth/login", () => {
       const res = await POST(makeRequest(validBody))
       const setCookieHeader = res.headers.get("set-cookie") ?? ""
 
-      expect(res.status).toBe(200)
+      expect(res.status).toBe(303)
+      expect(res.headers.get("location")).toBe("http://localhost/dashboard")
       expect(mockCookiesSet).toHaveBeenCalledTimes(2)
       expect(setCookieHeader).toContain("sb-access-token=access-token")
       expect(setCookieHeader).toContain("sb-refresh-token=refresh-token")
