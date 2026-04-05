@@ -22,10 +22,18 @@ export async function createClient() {
         },
         setAll(cookiesToSet: CookieToSet[]) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {}
+            cookiesToSet.forEach(({ name, value, options }) => {
+              const cookieOptions = {
+                ...options,
+                path: options?.path ?? "/",
+              }
+
+              cookieStore.set(name, value, cookieOptions)
+            })
+            console.log("Cookies set successfully:", cookiesToSet) // add this temporarily
+          } catch (e) {
+            console.error("Failed to set cookies:", e) // add this temporarily
+          }
         },
       },
     }

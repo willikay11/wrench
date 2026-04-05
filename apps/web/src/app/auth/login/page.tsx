@@ -4,13 +4,12 @@
 import * as React from "react"
 import Link from "next/link"
 import { Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
 
 import { loginSchema, type LoginValues } from "@/lib/schemas/auth"
-import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import {
@@ -31,10 +30,8 @@ import { Input } from "@/components/ui/input"
 import { Logo } from "@/components/brand/logo"
 
 function LoginForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = React.useState(false)
-  const supabase = React.useMemo(() => createClient(), [])
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -44,34 +41,39 @@ function LoginForm() {
     },
   })
 
-  async function onSubmit(values: LoginValues) {
-    setIsLoading(true)
+async function onSubmit(values: LoginValues) {
+  setIsLoading(true)
+  try {
+    const requestedNext = searchParams.get("next")
+    const next = requestedNext?.startsWith("/") ? requestedNext : "/dashboard"
 
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: values.email,
-        password: values.password,
-      })
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ ...values, next }),
+    })
 
-      if (error) {
-        toast.error(error.message ?? "Something went wrong. Please try again.")
-        return
-      }
-
-      toast.success("Welcome back.")
-      const next = searchParams.get("next") ?? "/"
-
-      router.replace(next)
-      router.refresh()
-      window.setTimeout(() => {
-        if (window.location.pathname !== next) {
-          window.location.assign(next)
-        }
-      }, 150)
-    } finally {
-      setIsLoading(false)
+    // Server returned an error — show it
+    if (!res.ok && !res.redirected) {
+      const data = await res.json().catch(() => ({})) as { error?: string }
+      toast.error(data.error ?? "Something went wrong. Please try again.")
+      return
     }
+
+    // Server redirected successfully — navigate there
+    if (res.redirected) {
+      window.location.href = res.url
+      return
+    }
+
+    // Fallback
+    window.location.href = next
+
+  } finally {
+    setIsLoading(false)
   }
+}
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">

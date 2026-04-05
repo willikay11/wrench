@@ -4,8 +4,10 @@ import { createClient } from "@/lib/supabase/server"
 const API_URL = process.env.INTERNAL_API_URL ?? "http://localhost:8000"
 
 async function getAuthToken(): Promise<string> {
-  const supabase = createClient()
-  const { data: { session } } = await supabase.auth.getSession()
+  const supabase = await createClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
 
   if (!session?.access_token) {
     throw new Error("No active session")

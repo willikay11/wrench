@@ -5,11 +5,13 @@ import { updateSession } from "./middleware"
 
 // ── Mock Supabase SSR ──────────────────────────────────────────────────────
 const mockGetUser = vi.fn()
+const mockGetSession = vi.fn()
 
 vi.mock("@supabase/ssr", () => ({
   createServerClient: () => ({
     auth: {
       getUser: mockGetUser,
+      getSession: mockGetSession,
     },
   }),
 }))
@@ -32,6 +34,7 @@ const authenticatedUser = {
 describe("updateSession", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockGetSession.mockResolvedValue({ data: { session: null } })
   })
 
   // ── Unauthenticated — protected routes ────────────────────────────────────
@@ -44,7 +47,7 @@ describe("updateSession", () => {
       const res = await updateSession(makeRequest("/dashboard"))
       expect(res.status).toBe(307)
       expect(res.headers.get("location")).toBe(
-        "http://localhost:3000/auth/login"
+        "http://localhost:3000/auth/login?next=%2Fdashboard"
       )
     })
 
@@ -52,7 +55,7 @@ describe("updateSession", () => {
       const res = await updateSession(makeRequest("/builds"))
       expect(res.status).toBe(307)
       expect(res.headers.get("location")).toBe(
-        "http://localhost:3000/auth/login"
+        "http://localhost:3000/auth/login?next=%2Fbuilds"
       )
     })
 
@@ -60,7 +63,7 @@ describe("updateSession", () => {
       const res = await updateSession(makeRequest("/builds/abc-123"))
       expect(res.status).toBe(307)
       expect(res.headers.get("location")).toBe(
-        "http://localhost:3000/auth/login"
+        "http://localhost:3000/auth/login?next=%2Fbuilds%2Fabc-123"
       )
     })
 
@@ -68,7 +71,7 @@ describe("updateSession", () => {
       const res = await updateSession(makeRequest("/profile"))
       expect(res.status).toBe(307)
       expect(res.headers.get("location")).toBe(
-        "http://localhost:3000/auth/login"
+        "http://localhost:3000/auth/login?next=%2Fprofile"
       )
     })
 
@@ -76,7 +79,7 @@ describe("updateSession", () => {
       const res = await updateSession(makeRequest("/settings"))
       expect(res.status).toBe(307)
       expect(res.headers.get("location")).toBe(
-        "http://localhost:3000/auth/login"
+        "http://localhost:3000/auth/login?next=%2Fsettings"
       )
     })
   })
@@ -111,6 +114,9 @@ describe("updateSession", () => {
   // ── Authenticated user ────────────────────────────────────────────────────
   describe("authenticated user", () => {
     beforeEach(() => {
+      mockGetSession.mockResolvedValue({
+        data: { session: { user: authenticatedUser } },
+      })
       mockGetUser.mockResolvedValue({ data: { user: authenticatedUser } })
     })
 
@@ -143,6 +149,7 @@ describe("updateSession", () => {
   // ── Expired session ───────────────────────────────────────────────────────
   describe("expired session", () => {
     it("redirects to /auth/login when JWT is expired", async () => {
+      mockGetSession.mockResolvedValue({ data: { session: null } })
       mockGetUser.mockResolvedValue({
         data: { user: null },
         error: { message: "JWT expired" },
@@ -151,11 +158,12 @@ describe("updateSession", () => {
       const res = await updateSession(makeRequest("/dashboard"))
       expect(res.status).toBe(307)
       expect(res.headers.get("location")).toBe(
-        "http://localhost:3000/auth/login"
+        "http://localhost:3000/auth/login?next=%2Fdashboard"
       )
     })
 
     it("redirects to /auth/login when token is invalid", async () => {
+      mockGetSession.mockResolvedValue({ data: { session: null } })
       mockGetUser.mockResolvedValue({
         data: { user: null },
         error: { message: "Invalid JWT" },
@@ -164,12 +172,15 @@ describe("updateSession", () => {
       const res = await updateSession(makeRequest("/builds"))
       expect(res.status).toBe(307)
       expect(res.headers.get("location")).toBe(
-        "http://localhost:3000/auth/login"
+        "http://localhost:3000/auth/login?next=%2Fbuilds"
       )
     })
 
     it("allows through when session is valid but close to expiry", async () => {
       // User object present means Supabase refreshed the session successfully
+      mockGetSession.mockResolvedValue({
+        data: { session: { user: authenticatedUser } },
+      })
       mockGetUser.mockResolvedValue({
         data: { user: authenticatedUser },
         error: null,
@@ -199,10 +210,10 @@ describe("updateSession", () => {
       expect(location.startsWith("http://localhost:3000")).toBe(true)
     })
 
-    it("redirect destination is exactly /auth/login with no trailing slash", async () => {
+    it("redirect destination preserves the original path in next", async () => {
       const res = await updateSession(makeRequest("/dashboard"))
       expect(res.headers.get("location")).toBe(
-        "http://localhost:3000/auth/login"
+        "http://localhost:3000/auth/login?next=%2Fdashboard"
       )
     })
   })
