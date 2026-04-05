@@ -31,6 +31,7 @@ export function BuildCard({ build }: BuildCardProps) {
   const status =
     statusConfig[build.status as keyof typeof statusConfig] ??
     statusConfig.planning
+  const car = build.car ?? build.donor_car
 
   const updatedAt = formatDistanceToNow(new Date(build.updated_at), {
     addSuffix: true,
@@ -50,9 +51,9 @@ export function BuildCard({ build }: BuildCardProps) {
             <h3 className="text-sm font-medium text-foreground truncate">
               {build.title}
             </h3>
-            {build.donor_car && (
+            {car && (
               <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                {build.donor_car}
+                {car}
                 {build.engine_swap && ` · ${build.engine_swap}`}
               </p>
             )}
