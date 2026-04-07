@@ -38,6 +38,37 @@ def with_parts_detail(build: dict[str, Any]) -> dict[str, Any]:
     return build_data
 
 
+def ensure_user_profile(user: CurrentUser) -> None:
+    """Ensure the authenticated user also exists in public.users."""
+    profile_email = user["email"] or f"{user['id']}@local.invalid"
+
+    existing_profile = (
+        get_supabase(user["access_token"])
+        .table("users")
+        .select("id")
+        .eq("id", user["id"])
+        .execute()
+    )
+
+    if existing_profile.data:
+        return
+
+    try:
+        get_supabase().table("users").upsert(
+            {
+                "id": user["id"],
+                "email": profile_email,
+            },
+            on_conflict="id",
+        ).execute()
+    except Exception:
+        logger.warning(
+            "Could not backfill public.users profile for %s",
+            user["id"],
+            exc_info=True,
+        )
+
+
 # ── GET /v1/builds ────────────────────────────────────────────────────────
 @router.get("/", response_model=list[BuildResponse])
 async def get_builds(user: CurrentUser = Depends(get_current_user)) -> list[dict[str, Any]]:
@@ -76,17 +107,26 @@ async def create_build(
     """
     supabase = get_supabase(user["access_token"])
 
-    response = (
-        supabase.table("builds")
-        .insert({
-            "title": payload.title,
-            "donor_car": payload.car,
-            "modification_goal": payload.modification_goal,
-            "goals": payload.goals,
-            "user_id": user["id"],
-        })
-        .execute()
-    )
+    try:
+        ensure_user_profile(user)
+
+        response = (
+            supabase.table("builds")
+            .insert({
+                "title": payload.title,
+                "donor_car": payload.car,
+                "modification_goal": payload.modification_goal,
+                "goals": payload.goals,
+                "user_id": user["id"],
+            })
+            .execute()
+        )
+    except Exception as exc:
+        logger.exception("Failed to create build for user %s", user["id"])
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create build",
+        ) from exc
 
     if not response.data:
         raise HTTPException(

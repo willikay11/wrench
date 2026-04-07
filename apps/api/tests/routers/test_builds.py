@@ -197,6 +197,25 @@ class TestCreateBuild:
         inserted_data = mock_insert.call_args[0][0]
         assert inserted_data["user_id"] == MOCK_USER["id"]
 
+    def test_ensures_public_user_profile_exists_before_insert(self, mock_supabase):
+        mock_table = mock_supabase.return_value.table.return_value
+        mock_table.select.return_value.eq.return_value.execute.return_value.data = []
+        mock_table.upsert.return_value.execute.return_value.data = [MOCK_USER]
+        mock_table.insert.return_value.execute.return_value.data = [MOCK_BUILD]
+
+        res = client.post(
+            "/v1/builds/",
+            json=self.VALID_PAYLOAD,
+            headers=AUTH_HEADER,
+        )
+
+        assert res.status_code == 201
+        mock_supabase.return_value.table.assert_any_call("users")
+        mock_table.upsert.assert_called_once_with(
+            {"id": MOCK_USER["id"], "email": MOCK_USER["email"]},
+            on_conflict="id",
+        )
+
     def test_returns_400_when_title_missing(self, mock_supabase):
         res = client.post(
             "/v1/builds/",
