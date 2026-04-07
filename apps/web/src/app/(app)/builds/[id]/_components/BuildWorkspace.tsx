@@ -1,6 +1,5 @@
 "use client"
 
-import Image from "next/image"
 import * as React from "react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
@@ -105,6 +104,11 @@ function LeftPanel({
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const [addingGoal, setAddingGoal] = React.useState(false)
   const [newGoal, setNewGoal] = React.useState("")
+  const [imageFailed, setImageFailed] = React.useState(false)
+
+  React.useEffect(() => {
+    setImageFailed(false)
+  }, [build.image_url])
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -144,13 +148,13 @@ function LeftPanel({
   return (
     <aside className="flex flex-col gap-4 overflow-y-auto border-r border-border p-4">
       {/* Image */}
-      {build.image_url ? (
-        <Image
+      {build.image_url && !imageFailed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
           src={build.image_url}
           alt={build.title}
-          width={800}
-          height={320}
-          unoptimized
+          loading="eager"
+          onError={() => setImageFailed(true)}
           className="h-40 w-full rounded-lg object-cover"
         />
       ) : (
