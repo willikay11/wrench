@@ -14,12 +14,21 @@ vi.mock("next/image", () => ({
   default: ({
     src,
     alt,
-    unoptimized: _unoptimized,
+    fill,
+    unoptimized,
     ...props
-  }: React.ImgHTMLAttributes<HTMLImageElement> & { unoptimized?: boolean }) => (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={typeof src === "string" ? src : ""} alt={alt ?? ""} {...props} />
-  ),
+  }: React.ImgHTMLAttributes<HTMLImageElement> & {
+    fill?: boolean
+    unoptimized?: boolean
+  }) => {
+    void fill
+    void unoptimized
+
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={typeof src === "string" ? src : ""} alt={alt ?? ""} {...props} />
+    )
+  },
 }))
 
 const mockBuild: Build = {

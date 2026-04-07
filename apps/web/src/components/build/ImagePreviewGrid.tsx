@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import * as React from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Cancel01Icon } from "@hugeicons/core-free-icons"
@@ -56,10 +57,13 @@ export function ImagePreviewGrid({
           className="overflow-hidden rounded-xl border border-border bg-background"
         >
           <div className="relative aspect-[4/3] bg-muted/30">
-            <img
+            <Image
               src={preview.url}
               alt={`Preview of ${preview.file.name}`}
-              className="h-full w-full object-cover"
+              fill
+              unoptimized
+              sizes="(min-width: 640px) 33vw, 50vw"
+              className="object-cover"
             />
 
             {onRemove && (
