@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import * as React from "react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
@@ -131,7 +132,7 @@ function LeftPanel({
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) throw new Error("Not signed in")
-      await updateBuild(build.id, { goals: [...build.goals, trimmed] }, session.access_token)
+      await updateBuild(build.id, { goals: [...(build.goals ?? []), trimmed] }, session.access_token)
       toast.success("Goal added.")
       setNewGoal("")
       setAddingGoal(false)
@@ -144,9 +145,12 @@ function LeftPanel({
     <aside className="flex flex-col gap-4 overflow-y-auto border-r border-border p-4">
       {/* Image */}
       {build.image_url ? (
-        <img
+        <Image
           src={build.image_url}
           alt={build.title}
+          width={800}
+          height={320}
+          unoptimized
           className="h-40 w-full rounded-lg object-cover"
         />
       ) : (
