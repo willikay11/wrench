@@ -198,7 +198,10 @@ async def patch_build(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Build not found",
         )
-    if existing.data["user_id"] != user["id"]:
+
+    existing_data = cast(dict[str, Any], existing.data)
+
+    if existing_data["user_id"] != user["id"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden",
