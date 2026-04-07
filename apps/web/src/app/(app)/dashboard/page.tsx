@@ -1,6 +1,6 @@
 // apps/web/src/app/dashboard/page.tsx
 import Link from "next/link"
-import { getBuilds } from "@/lib/api/builds"
+import { getBuilds } from "@/lib/api/builds.server"
 import { BuildCard } from "../../dashboard/_components/build-card"
 import { StatsBar } from "../../dashboard/_components/stats-bar"
 import { EmptyState } from "../../dashboard/_components/empty-state"

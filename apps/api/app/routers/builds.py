@@ -5,7 +5,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.core.dependencies import CurrentUser, get_current_user
 from app.core.supabase import get_supabase
-from app.schemas.builds import BuildCreate, BuildResponse, BuildImageResponse
+from app.schemas.builds import (
+    BuildCreate,
+    BuildDetailResponse,
+    BuildImageResponse,
+    BuildResponse,
+    BuildUpdate,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -17,6 +23,17 @@ def with_part_counts(build: dict[str, Any]) -> dict[str, Any]:
     build_data["parts_total"] = len(parts)
     build_data["parts_sourced"] = sum(
         1 for part in parts if part.get("status") in ("sourced", "installed")
+    )
+    return build_data
+
+
+def with_parts_detail(build: dict[str, Any]) -> dict[str, Any]:
+    """Keep full parts list in the dict and compute counts."""
+    build_data = dict(build)
+    parts = cast(list[dict[str, Any]], build_data.get("parts", []) or [])
+    build_data["parts_total"] = len(parts)
+    build_data["parts_sourced"] = sum(
+        1 for p in parts if p.get("status") in ("sourced", "installed")
     )
     return build_data
 
@@ -64,7 +81,7 @@ async def create_build(
         .insert({
             "title": payload.title,
             "donor_car": payload.car,
-            "engine_swap": payload.engine_swap,
+            "modification_goal": payload.modification_goal,
             "goals": payload.goals,
             "user_id": user["id"],
         })
@@ -81,17 +98,17 @@ async def create_build(
 
 
 #── GET /v1/builds/{id} ────────────────────────────────────────────────────────
-@router.get("/{build_id}", response_model=BuildResponse)
+@router.get("/{build_id}", response_model=BuildDetailResponse)
 async def get_build(build_id: str, user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
     """
-    Returns a single build by ID, but only if it belongs to the authenticated user.
-    This is used by the frontend when navigating to /builds/{id} to fetch the build details.
+    Returns a single build with full part data, but only if it belongs to
+    the authenticated user.
     """
     supabase = get_supabase(user["access_token"])
 
     response = (
         supabase.table("builds")
-        .select("*, parts(status)")
+        .select("*, parts(*)")
         .eq("user_id", user["id"])
         .eq("id", build_id)
         .single()
@@ -104,7 +121,7 @@ async def get_build(build_id: str, user: CurrentUser = Depends(get_current_user)
             detail="Build not found",
         )
 
-    return with_part_counts(cast(dict[str, Any], response.data))
+    return with_parts_detail(cast(dict[str, Any], response.data))
 
 
 # ── PUT /v1/builds/{id} ────────────────────────────────────────────────────────
@@ -115,12 +132,10 @@ async def update_build(
     user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
     """
-    Updates an existing build by ID, but only if it belongs to the authenticated user.
-    The client can update the title, car, optional engine swap, and goals.
+    Full replacement update of a build. All fields from BuildCreate are required.
     """
     supabase = get_supabase(user["access_token"])
 
-    # First, verify the build exists and belongs to the user
     existing = (
         supabase.table("builds")
         .select("*")
@@ -136,13 +151,12 @@ async def update_build(
             detail="Build not found",
         )
 
-    # Then perform the update
     response = (
         supabase.table("builds")
         .update({
             "title": payload.title,
             "donor_car": payload.car,
-            "engine_swap": payload.engine_swap,
+            "modification_goal": payload.modification_goal,
             "goals": payload.goals,
         })
         .eq("id", build_id)
@@ -157,6 +171,65 @@ async def update_build(
 
     return with_part_counts(cast(dict[str, Any], response.data[0]))
 
+
+# ── PATCH /v1/builds/{id} ────────────────────────────────────────────────────────
+@router.patch("/{build_id}", response_model=BuildDetailResponse)
+async def patch_build(
+    build_id: str,
+    payload: BuildUpdate,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Partial update — only fields present in the request body are changed.
+    Returns the full BuildDetailResponse with parts.
+    """
+    supabase = get_supabase(user["access_token"])
+
+    existing = (
+        supabase.table("builds")
+        .select("id, user_id")
+        .eq("id", build_id)
+        .single()
+        .execute()
+    )
+
+    if not existing.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Build not found",
+        )
+    if existing.data["user_id"] != user["id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
+        )
+
+    update_data: dict[str, Any] = {}
+    if payload.title is not None:
+        update_data["title"] = payload.title
+    if payload.car is not None:
+        update_data["donor_car"] = payload.car
+    if payload.modification_goal is not None:
+        update_data["modification_goal"] = payload.modification_goal
+    if payload.goals is not None:
+        update_data["goals"] = payload.goals
+    if payload.status is not None:
+        update_data["status"] = payload.status
+
+    if update_data:
+        supabase.table("builds").update(update_data).eq("id", build_id).execute()
+
+    fresh = (
+        supabase.table("builds")
+        .select("*, parts(*)")
+        .eq("id", build_id)
+        .single()
+        .execute()
+    )
+
+    return with_parts_detail(cast(dict[str, Any], fresh.data))
+
+
 # ── DELETE /v1/builds/{id} ────────────────────────────────────────────────────────
 @router.delete("/{build_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_build(build_id: str, user: CurrentUser = Depends(get_current_user)) -> None:
@@ -166,7 +239,6 @@ async def delete_build(build_id: str, user: CurrentUser = Depends(get_current_us
     """
     supabase = get_supabase(user["access_token"])
 
-    # First, verify the build exists and belongs to the user
     existing = (
         supabase.table("builds")
         .select("*")
@@ -182,7 +254,6 @@ async def delete_build(build_id: str, user: CurrentUser = Depends(get_current_us
             detail="Build not found",
         )
 
-    # Then perform the delete
     response = (
         supabase.table("builds")
         .delete()

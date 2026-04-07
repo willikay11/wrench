@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react"
 import DashboardPage from "../(app)/dashboard/page"
 
 // ── Mock API ───────────────────────────────────────────────────────────────
-vi.mock("@/lib/api/builds", () => ({
+vi.mock("@/lib/api/builds.server", () => ({
   getBuilds: vi.fn(),
 }))
 
@@ -20,7 +20,7 @@ vi.mock("@/components/brand/logo", () => ({
   Logo: () => <div data-testid="logo">Wrench</div>,
 }))
 
-import { getBuilds } from "@/lib/api/builds"
+import { getBuilds } from "@/lib/api/builds.server"
 const mockGetBuilds = vi.mocked(getBuilds)
 
 // ── Fixtures ───────────────────────────────────────────────────────────────

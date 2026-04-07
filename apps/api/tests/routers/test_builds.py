@@ -18,11 +18,27 @@ MOCK_BUILD = {
     "user_id": MOCK_USER["id"],
     "title": "E30 K24 swap",
     "donor_car": "1991 BMW E30 325i",
-    "engine_swap": "Honda K24A2",
     "goals": ["daily", "track"],
+    "modification_goal": None,
     "image_url": None,
     "status": "planning",
     "is_public": False,
+    "created_at": "2026-01-01T00:00:00+00:00",
+    "updated_at": "2026-01-01T00:00:00+00:00",
+}
+
+MOCK_PART = {
+    "id": "part-001",
+    "build_id": "build-001",
+    "name": "K24A2 Engine",
+    "description": None,
+    "category": "engine",
+    "status": "needed",
+    "price_estimate": 1500.00,
+    "vendor_url": None,
+    "is_safety_critical": False,
+    "notes": None,
+    "goal": "K24 engine swap",
     "created_at": "2026-01-01T00:00:00+00:00",
     "updated_at": "2026-01-01T00:00:00+00:00",
 }
@@ -137,7 +153,6 @@ class TestCreateBuild:
     VALID_PAYLOAD = {
         "title": "E30 K24 swap",
         "car": "1991 BMW E30 325i",
-        "engine_swap": "Honda K24A2",
         "goals": ["daily", "track"],
     }
 
@@ -192,7 +207,7 @@ class TestCreateBuild:
         assert res.status_code == 422
 
     def test_creates_build_with_minimal_payload(self, mock_supabase):
-        minimal_build = {**MOCK_BUILD, "donor_car": None, "engine_swap": None, "goals": []}
+        minimal_build = {**MOCK_BUILD, "donor_car": None, "goals": []}
         mock_supabase.return_value.table.return_value \
             .insert.return_value \
             .execute.return_value.data = [minimal_build]
@@ -223,28 +238,46 @@ class TestCreateBuild:
         assert res.status_code == 401
 
 
-# ── POST /v1/builds/{id} ────────────────────────────────────────────────────────
+# ── GET /v1/builds/{id} ────────────────────────────────────────────────────────
 class TestGetBuild:
-    def test_returns_200_with_build(self, mock_supabase):
+    def test_returns_200_with_build_and_parts(self, mock_supabase):
+        build_with_parts = {**MOCK_BUILD, "parts": [MOCK_PART]}
         mock_supabase.return_value.table.return_value \
             .select.return_value \
             .eq.return_value \
             .eq.return_value \
             .single.return_value \
-            .execute.return_value.data = MOCK_BUILD
+            .execute.return_value.data = build_with_parts
 
         res = client.get("/v1/builds/build-001", headers=AUTH_HEADER)
 
         assert res.status_code == 200
         assert res.json()["title"] == "E30 K24 swap"
         assert res.json()["id"] == "build-001"
+        assert len(res.json()["parts"]) == 1
+        assert res.json()["parts"][0]["name"] == "K24A2 Engine"
+
+    def test_computes_parts_total_and_sourced(self, mock_supabase):
+        sourced_part = {**MOCK_PART, "id": "part-002", "status": "sourced"}
+        build_with_parts = {**MOCK_BUILD, "parts": [MOCK_PART, sourced_part]}
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = build_with_parts
+
+        res = client.get("/v1/builds/build-001", headers=AUTH_HEADER)
+
+        assert res.json()["parts_total"] == 2
+        assert res.json()["parts_sourced"] == 1
 
     def test_filters_by_build_id(self, mock_supabase):
         mock_select = mock_supabase.return_value.table.return_value.select.return_value
         mock_select.eq.return_value \
             .eq.return_value \
             .single.return_value \
-            .execute.return_value.data = MOCK_BUILD
+            .execute.return_value.data = {**MOCK_BUILD, "parts": []}
 
         client.get("/v1/builds/build-001", headers=AUTH_HEADER)
 
@@ -266,10 +299,10 @@ class TestGetBuild:
         res = client.get("/v1/builds/build-001")
         assert res.status_code == 401
 
-#── PUT /v1/builds/{id} ────────────────────────────────────────────────────────
+
+# ── PUT /v1/builds/{id} ────────────────────────────────────────────────────────
 class TestUpdateBuild:
     def test_returns_200_with_updated_build(self, mock_supabase):
-        # Mock the initial existence check
         mock_supabase.return_value.table.return_value \
             .select.return_value \
             .eq.return_value \
@@ -277,7 +310,6 @@ class TestUpdateBuild:
             .single.return_value \
             .execute.return_value.data = MOCK_BUILD
 
-        # Mock the update response
         updated_build = {**MOCK_BUILD, "title": "Updated title"}
         mock_supabase.return_value.table.return_value \
             .update.return_value \
@@ -295,14 +327,13 @@ class TestUpdateBuild:
         assert res.json()["id"] == "build-001"
 
     def test_returns_404_when_build_not_found(self, mock_supabase):
-        # Mock the existence check to return no build
         mock_supabase.return_value.table.return_value \
             .select.return_value \
             .eq.return_value \
             .eq.return_value \
             .single.return_value \
             .execute.return_value.data = None
-        
+
         res = client.put(
             "/v1/builds/build-001",
             json={"title": "Updated title"},
@@ -310,7 +341,7 @@ class TestUpdateBuild:
         )
 
         assert res.status_code == 404
-    
+
     def test_returns_401_without_auth_header(self):
         res = client.put(
             "/v1/builds/build-001",
@@ -319,7 +350,6 @@ class TestUpdateBuild:
         assert res.status_code == 401
 
     def test_updates_only_allowed_fields(self, mock_supabase):
-        # Mock the initial existence check
         mock_supabase.return_value.table.return_value \
             .select.return_value \
             .eq.return_value \
@@ -330,17 +360,16 @@ class TestUpdateBuild:
         payload = {
             "title": "Updated title",
             "car": "New donor",
-            "engine_swap": "New engine",
+            "modification_goal": "Track build with coilovers",
             "goals": ["new goal"],
             "status": "completed",  # This should be ignored
         }
 
-        # Mock the update response to reflect only the allowed fields changing
         updated_build = {
             **MOCK_BUILD,
             "title": payload["title"],
             "donor_car": payload["car"],
-            "engine_swap": payload["engine_swap"],
+            "modification_goal": payload["modification_goal"],
             "goals": payload["goals"],
         }
         mock_supabase.return_value.table.return_value \
@@ -357,14 +386,102 @@ class TestUpdateBuild:
         assert res.status_code == 200
         assert res.json()["title"] == "Updated title"
         assert res.json()["car"] == "New donor"
-        assert res.json()["engine_swap"] == "New engine"
+        assert res.json()["modification_goal"] == "Track build with coilovers"
         assert res.json()["goals"] == ["new goal"]
         assert res.json()["status"] == "planning"  # Unchanged
+
+
+# ── PATCH /v1/builds/{id} ────────────────────────────────────────────────────────
+class TestPatchBuild:
+    def _mock_ownership_check(self, mock_supabase, data=None):
+        """Helper to set up the ownership-check select mock."""
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = data or {"id": "build-001", "user_id": MOCK_USER["id"]}
+
+    def _mock_fresh_fetch(self, mock_supabase, build_data):
+        """Helper to set up the post-update fetch mock."""
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = build_data
+
+    def test_returns_200_with_patched_build(self, mock_supabase):
+        ownership = {"id": "build-001", "user_id": MOCK_USER["id"]}
+        fresh = {**MOCK_BUILD, "parts": [], "title": "Patched title"}
+
+        # First call: ownership check; second call: fresh fetch
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = ownership
+
+        mock_supabase.return_value.table.return_value \
+            .update.return_value \
+            .eq.return_value \
+            .execute.return_value.data = [fresh]
+
+        # Override single().execute for the fresh fetch after update
+        # Using side_effect to return different values on successive calls
+        mock_single = mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .single.return_value
+        mock_single.execute.return_value.data = fresh
+
+        res = client.patch(
+            "/v1/builds/build-001",
+            json={"title": "Patched title"},
+            headers=AUTH_HEADER,
+        )
+
+        assert res.status_code == 200
+        assert res.json()["title"] == "Patched title"
+        assert "parts" in res.json()
+
+    def test_returns_404_when_build_not_found(self, mock_supabase):
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = None
+
+        res = client.patch(
+            "/v1/builds/build-001",
+            json={"title": "New title"},
+            headers=AUTH_HEADER,
+        )
+
+        assert res.status_code == 404
+
+    def test_returns_403_when_build_belongs_to_other_user(self, mock_supabase):
+        other_user_build = {"id": "build-001", "user_id": "other-user-id"}
+        mock_supabase.return_value.table.return_value \
+            .select.return_value \
+            .eq.return_value \
+            .single.return_value \
+            .execute.return_value.data = other_user_build
+
+        res = client.patch(
+            "/v1/builds/build-001",
+            json={"title": "New title"},
+            headers=AUTH_HEADER,
+        )
+
+        assert res.status_code == 403
+
+    def test_returns_401_without_auth_header(self):
+        res = client.patch("/v1/builds/build-001", json={"title": "New title"})
+        assert res.status_code == 401
+
 
 # ── DELETE /v1/builds/{id} ────────────────────────────────────────────────────────
 class TestDeleteBuild:
     def test_returns_204_when_build_deleted(self, mock_supabase):
-        # Mock the initial existence check
         mock_supabase.return_value.table.return_value \
             .select.return_value \
             .eq.return_value \
@@ -372,7 +489,6 @@ class TestDeleteBuild:
             .single.return_value \
             .execute.return_value.data = MOCK_BUILD
 
-        # Mock the delete response
         mock_supabase.return_value.table.return_value \
             .delete.return_value \
             .eq.return_value \
@@ -386,7 +502,6 @@ class TestDeleteBuild:
         assert res.status_code == 204
 
     def test_returns_404_when_build_not_found(self, mock_supabase):
-        # Mock the existence check to return no build
         mock_supabase.return_value.table.return_value \
             .select.return_value \
             .eq.return_value \
