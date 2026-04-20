@@ -545,17 +545,39 @@ async def generate_parts_for_build_new(
         )
 
     try:
-        result = await generate_parts_for_build({
-            "car": build_data.get("donor_car"),
-            "modification_goal": build_data.get("modification_goal"),
-            "goals": goals,
-        })
+        # Extract specific_requirements from modification_goal if present
+        modification_goal = build_data.get("modification_goal", "")
+        specific_requirements = None
+        if " — Specifically: " in modification_goal:
+            base_goal, specific = modification_goal.split(" — Specifically: ", 1)
+            specific_requirements = specific
+            modification_goal = base_goal
+
+        result = await generate_parts_for_build(
+            {
+                "car": build_data.get("donor_car"),
+                "modification_goal": modification_goal,
+                "goals": goals,
+            },
+            specific_requirements=specific_requirements,
+        )
         parts_to_insert = result.get("parts", [])
 
-        # Normalize categories to lowercase
+        # Normalize categories and status to lowercase
+        allowed_statuses = {"needed", "ordered", "sourced", "installed"}
         for part in parts_to_insert:
             if part.get("category"):
                 part["category"] = part["category"].lower()
+            if part.get("status"):
+                status_lower = part["status"].lower()
+                # Map common variations to allowed status values
+                if status_lower not in allowed_statuses:
+                    # Default to 'needed' if not a valid status
+                    part["status"] = "needed"
+                else:
+                    part["status"] = status_lower
+            else:
+                part["status"] = "needed"
     except AIClientError as exc:
         logger.error("Parts generation AI error: %s", exc.message)
         raise HTTPException(

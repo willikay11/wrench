@@ -18,10 +18,13 @@ Build details:
 - Modification goal: {modification_goal}
 - Use case: {use_case}
 - Goals: {goals}
+- Specific requirements: {specific_requirements}
 
 Generate a comprehensive parts list. For each part:
 - Be specific with part names (include brand if relevant)
 - Assign ONLY these categories (lowercase): engine, drivetrain, electrical, cooling, safety, other
+- Set status to one of: needed, ordered, sourced, installed
+  (almost all parts should be "needed" initially)
 - Include the goal this part belongs to
 - Provide realistic price estimates in USD
 - Flag safety-critical parts (anything that affects
@@ -39,6 +42,15 @@ Important rules:
   driveshaft, cooling, electrical/ECU components
 - For suspension upgrades, use "other" category for
   suspension parts (coilovers/springs, alignment, brackets)
+- If specific requirements are provided (brand, size, colour),
+  use them exactly. For example, if the user said "19-inch
+  bronze Work wheels", find Work wheel part numbers and specs,
+  not generic alternatives.
+- If a reference image is provided, use it to identify:
+  * The exact style, colour and finish of the modification
+  * Any brand markings or model numbers visible
+  * The fitment and sizing if determinable from the image
+  Use this visual information to find exact matching parts.
 - Be realistic about prices — use current market rates
 - Maximum 40 parts total, minimum 5
 - Category must be one of: engine, drivetrain, electrical, cooling, safety, other
@@ -68,9 +80,14 @@ Respond with valid JSON only, no markdown:
 """
 
 
-async def generate_parts_for_build(build: dict[str, Any]) -> dict[str, Any]:
+async def generate_parts_for_build(
+    build: dict[str, Any],
+    specific_requirements: str | None = None,
+    image_base64: str | None = None,
+) -> dict[str, Any]:
     """
     Takes a build dict and returns generated parts as a dict.
+    If image_base64 is provided, Gemini will analyze it to improve part selection.
     Raises AIClientError if generation fails.
     """
     car = build.get("car") or build.get("donor_car") or "Unknown car"
@@ -79,15 +96,17 @@ async def generate_parts_for_build(build: dict[str, Any]) -> dict[str, Any]:
     if modification_goal and "track" in modification_goal.lower():
         use_case = "daily driver and track use"
     goals = ", ".join(build.get("goals", [modification_goal]))
+    specific_reqs = specific_requirements or "None specified — recommend best options"
 
     prompt = PARTS_GENERATION_PROMPT.format(
         car=car,
         modification_goal=modification_goal,
         use_case=use_case,
         goals=goals,
+        specific_requirements=specific_reqs,
     )
 
-    raw = await generate(prompt, json_mode=True)
+    raw = await generate(prompt, image_base64=image_base64, json_mode=True)
 
     try:
         data = json.loads(raw)

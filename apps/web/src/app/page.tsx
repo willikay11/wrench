@@ -9,7 +9,7 @@ import { Logo } from "@/components/brand/logo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { createClient } from "@/lib/supabase/client"
-import { createBuild, generatePartsNew } from "@/lib/api/builds"
+import { createBuild, generatePartsNew, uploadBuildImage } from "@/lib/api/builds"
 import {
   type ConversationMessage,
   type ExtractedContext,
@@ -17,7 +17,7 @@ import {
 } from "@/lib/api/conversation"
 import { cn } from "@/lib/utils"
 
-type PageState = "idle" | "chatting" | "creating"
+type PageState = "idle" | "chatting" | "refining" | "creating"
 
 export default function HomePage() {
   const router = useRouter()
@@ -37,9 +37,14 @@ export default function HomePage() {
     use_case: null,
   })
 
+  // Refining state
+  const [referenceImage, setReferenceImage] = React.useState<File | null>(null)
+  const [referenceDescription, setReferenceDescription] = React.useState("")
+
   // Creating state
   const [completedSteps, setCompletedSteps] = React.useState(0)
   const [creatingStartTime, setCreatingStartTime] = React.useState<number | null>(null)
+  const [hasImage, setHasImage] = React.useState(false)
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
@@ -130,42 +135,50 @@ export default function HomePage() {
     [messages, sessionId, pageState],
   )
 
-  const handleConfirm = React.useCallback(async () => {
-    console.log("handleConfirm called!")
+  const handleConfirm = React.useCallback(() => {
+    setPageState("refining")
+  }, [])
+
+  const handleRefiningContinue = React.useCallback(async () => {
     setPageState("creating")
     const startTime = Date.now()
     setCreatingStartTime(startTime)
     setCompletedSteps(0)
+    setHasImage(!!referenceImage)
 
     let buildId: string | null = null
 
     try {
-      console.log("handleConfirm: entered try block")
       const supabase = createClient()
-      console.log("handleConfirm: created supabase client")
       const { data: { session } } = await supabase.auth.getSession()
-      console.log("handleConfirm: got session:", session ? "yes" : "no", session?.access_token ? "has token" : "no token")
       if (!session?.access_token) throw new Error("Not authenticated")
-      console.log("handleConfirm: session authenticated")
 
       // Step 1: Create build
-      console.log("Starting build creation with extracted:", extracted)
       const buildPayload = {
         title: `${extracted.car} — ${extracted.goal}`,
         car: extracted.car || undefined,
         goals: extracted.goal ? [extracted.goal] : [],
-        modification_goal: extracted.goal && extracted.use_case
-          ? `${extracted.goal} — ${extracted.use_case}`
-          : undefined,
+        modification_goal: referenceDescription
+          ? `${extracted.goal} — ${extracted.use_case}. Specifically: ${referenceDescription}`
+          : `${extracted.goal} — ${extracted.use_case}`,
       }
-      console.log("Build payload:", buildPayload)
       const created = await createBuild(buildPayload, session.access_token)
-      console.log("createBuild response:", created)
       buildId = created.id
-      console.log("Build created with id:", buildId)
       setCompletedSteps(1)
 
-      // Step 2: Generate parts (with timeout)
+      // Step 2: Upload image if provided
+      if (referenceImage) {
+        try {
+          await uploadBuildImage(created.id, referenceImage, session.access_token)
+        } catch (imageErr) {
+          console.error("Image upload error:", imageErr)
+          toast.error("Photo upload failed — proceeding without it")
+        }
+        setCompletedSteps(2)
+      }
+
+      // Step 3: Generate parts (with timeout)
+      const generationStep = referenceImage ? 3 : 2
       try {
         const partsPromise = generatePartsNew(created.id, session.access_token, false)
         const timeoutPromise = new Promise((_, reject) =>
@@ -173,38 +186,31 @@ export default function HomePage() {
         )
         await Promise.race([partsPromise, timeoutPromise])
       } catch (partsErr) {
-        // Parts generation failed but build succeeded - continue anyway
         console.error("Parts generation error:", partsErr)
         toast.error("Build created but parts generation failed — you can generate from the workspace")
       }
-      setCompletedSteps(2)
+      setCompletedSteps(generationStep + 1)
 
-      // Step 3: Brief pause for visual feedback
+      // Step 4: Brief pause for visual feedback
       const elapsed = Date.now() - startTime
       const remaining = Math.max(2000 - elapsed, 300)
-      console.log("Elapsed:", elapsed, "Remaining:", remaining, "BuildId:", buildId)
-      setCompletedSteps(3)
+      const totalSteps = referenceImage ? 5 : 4
+      setCompletedSteps(totalSteps - 1)
 
-      // Step 4: Redirect - wait for animation to complete
+      // Step 5: Redirect - wait for animation to complete
       setTimeout(() => {
-        console.log("Redirect callback firing, buildId:", buildId)
         if (buildId) {
-          console.log("Pushing to /builds/" + buildId)
           router.push(`/builds/${buildId}`)
-        } else {
-          console.error("No buildId available for redirect")
         }
       }, remaining)
-
-      console.log("Redirect timeout set for", remaining, "ms")
     } catch (err) {
       console.error("Build creation error:", err)
       toast.error(
         err instanceof Error ? err.message : "Failed to create build",
       )
-      setPageState("chatting")
+      setPageState("refining")
     }
-  }, [extracted, router])
+  }, [extracted, referenceImage, referenceDescription, router])
 
   const handleChipClick = (chipText: string) => {
     handleSendMessage(chipText)
@@ -309,8 +315,27 @@ export default function HomePage() {
     )
   }
 
+  if (pageState === "refining") {
+    return (
+      <RefiningState
+        car={extracted.car || ""}
+        goal={extracted.goal || ""}
+        referenceImage={referenceImage}
+        referenceDescription={referenceDescription}
+        onImageSelect={setReferenceImage}
+        onDescriptionChange={setReferenceDescription}
+        onContinue={handleRefiningContinue}
+        onSkip={() => {
+          setReferenceImage(null)
+          setReferenceDescription("")
+          handleRefiningContinue()
+        }}
+      />
+    )
+  }
+
   if (pageState === "creating") {
-    return <CreatingState completedSteps={completedSteps} />
+    return <CreatingState completedSteps={completedSteps} hasImage={hasImage} />
   }
 
   // Chatting state - full viewport
@@ -467,13 +492,208 @@ export default function HomePage() {
   )
 }
 
-function CreatingState({ completedSteps }: { completedSteps: number }) {
-  const steps = [
+interface RefiningStateProps {
+  car: string
+  goal: string
+  referenceImage: File | null
+  referenceDescription: string
+  onImageSelect: (file: File) => void
+  onDescriptionChange: (text: string) => void
+  onContinue: () => void
+  onSkip: () => void
+}
+
+function RefiningState({
+  car,
+  goal,
+  referenceImage,
+  referenceDescription,
+  onImageSelect,
+  onDescriptionChange,
+  onContinue,
+  onSkip,
+}: RefiningStateProps) {
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const [showDescInput, setShowDescInput] = React.useState(false)
+  const selected = !!referenceImage || !!referenceDescription || false
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) onImageSelect(file)
+  }
+
+  return (
+    <div className="flex min-h-screen flex-col bg-background">
+      {/* Navbar */}
+      <header className="h-14 border-b border-border/30 px-4 py-3 shrink-0">
+        <Logo variant="icon" size="md" />
+      </header>
+
+      {/* Main content */}
+      <main className="flex-1 overflow-y-auto px-4 py-6">
+        <div className="mx-auto w-full max-w-[680px]">
+          {/* Message */}
+          <div className="mb-8">
+            <div className="flex gap-3">
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center">
+                <span className="size-1.5 rounded-full bg-[#D97706]" />
+              </div>
+              <div className="text-foreground">
+                <p className="mb-2">One last thing — do you have anything specific in mind?</p>
+                <p className="text-sm text-foreground/70">
+                  A photo of what you want, a brand, or a size preference helps me find the exact right parts.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Cards */}
+          <div className="space-y-3 mb-8">
+            {/* Upload Photo Card */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full rounded-xl border-2 border-dashed border-border p-6 text-left transition-all hover:border-[#D97706] hover:bg-[#D97706]/5"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#D97706]/10">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="h-6 w-6 text-[#D97706]"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <path d="m21 15-5-5L5 21" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">
+                    {referenceImage ? referenceImage.name : "Upload a photo"}
+                  </p>
+                  <p className="text-sm text-foreground/70">
+                    {referenceImage ? "Photo selected" : "Show me what you're going for"}
+                  </p>
+                </div>
+                {referenceImage && (
+                  <span className="text-green-600">✓</span>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </button>
+
+            {/* Describe Card */}
+            <button
+              onClick={() => setShowDescInput(true)}
+              className="w-full rounded-xl border-2 border-border p-6 text-left transition-all hover:border-[#D97706] hover:bg-[#D97706]/5"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#D97706]/10">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="h-6 w-6 text-[#D97706]"
+                  >
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">
+                    {referenceDescription ? "Description added" : "Describe what you want"}
+                  </p>
+                  <p className="text-sm text-foreground/70">
+                    {referenceDescription || "Brand, size, colour, style..."}
+                  </p>
+                </div>
+                {referenceDescription && (
+                  <span className="text-green-600">✓</span>
+                )}
+              </div>
+            </button>
+
+            {/* Description Input */}
+            {showDescInput && (
+              <div className="rounded-xl border border-border bg-card p-4">
+                <textarea
+                  value={referenceDescription}
+                  onChange={(e) => onDescriptionChange(e.target.value)}
+                  placeholder="e.g. 19-inch bronze Work wheels, or Enkei RPF1 in silver"
+                  className="w-full min-h-24 rounded-lg border border-border bg-background px-3 py-2 text-foreground placeholder:text-foreground/40 focus:border-[#D97706] focus:outline-none resize-none"
+                  autoFocus
+                />
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    onClick={() => setShowDescInput(false)}
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                  >
+                    Done
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Skip Card */}
+            <button
+              onClick={onSkip}
+              className="w-full rounded-xl border border-border p-6 text-left transition-all hover:border-foreground/30 hover:bg-foreground/5"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-foreground/10">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="h-6 w-6 text-foreground/60"
+                  >
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">Show me the options</p>
+                  <p className="text-sm text-foreground/70">I'll pick from what you find</p>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          {/* Continue Button */}
+          <div className="flex gap-2">
+            <Button
+              onClick={onContinue}
+              disabled={!selected}
+              className="flex-1 bg-brand text-white hover:bg-brand/90 disabled:opacity-50"
+            >
+              Generate my parts list →
+            </Button>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+function CreatingState({ completedSteps, hasImage }: { completedSteps: number; hasImage: boolean }) {
+  const baseSteps = [
     "Build understood",
+    ...(hasImage ? ["Analysing your photo..."] : []),
     "Generating parts list",
     "Finding vendor pricing",
     "Finalizing build",
   ]
+  const steps = baseSteps
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-10 bg-background px-4">

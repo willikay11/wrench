@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 
 import anthropic
-import google.genai
+import google.genai as genai
 from groq import AsyncGroq
 
 from app.core.config import settings
@@ -23,18 +23,23 @@ class AIClientError(Exception):
 
 async def generate(
     prompt: str,
-    image_base64: Optional[str] = None,
+    image_base64: str | None = None,
     image_mime_type: str = "image/jpeg",
     json_mode: bool = False,
+    force_provider: str | None = None,
 ) -> str:
     """
-    Generate text using the configured AI provider (Gemini, Claude, or Groq).
+    Generate text using the configured AI provider.
+
+    Vision calls automatically route to VISION_PROVIDER (Gemini by default),
+    while text-only calls use AI_PROVIDER (Groq by default).
 
     Args:
         prompt: The text prompt to send to the model
         image_base64: Optional base64-encoded image data for vision tasks
         image_mime_type: MIME type of the image (default: image/jpeg)
         json_mode: If True, instruct the model to return only valid JSON
+        force_provider: Override the provider selection ("gemini", "claude", "groq")
 
     Returns:
         The model's text response as a plain string
@@ -42,15 +47,18 @@ async def generate(
     Raises:
         AIClientError: If the API call fails
     """
-    provider = settings.ai_provider.lower()
-    model = settings.ai_model
-
-    # Check for vision requests with Groq (not supported)
-    if provider == "groq" and image_base64:
-        raise AIClientError(
-            "Groq does not support vision. Set AI_PROVIDER=gemini for image inputs.",
-            "groq"
-        )
+    # Determine which provider to use
+    if force_provider:
+        provider = force_provider.lower()
+        model = settings.ai_model  # Use default model for forced provider
+    elif image_base64:
+        # Vision calls always use VISION_PROVIDER
+        provider = settings.vision_provider.lower()
+        model = settings.vision_model
+    else:
+        # Text-only calls use AI_PROVIDER
+        provider = settings.ai_provider.lower()
+        model = settings.ai_model
 
     # Add JSON instruction if requested
     if json_mode:
@@ -61,6 +69,11 @@ async def generate(
     elif provider == "claude":
         return await _generate_claude(prompt, image_base64, image_mime_type, model)
     elif provider == "groq":
+        if image_base64:
+            raise AIClientError(
+                "Groq does not support vision. Use VISION_PROVIDER=gemini or VISION_PROVIDER=claude.",
+                "groq"
+            )
         return await _call_groq(prompt, json_mode, model)
     else:
         raise AIClientError(f"Unknown provider: {provider}", provider)
@@ -74,14 +87,14 @@ async def _generate_gemini(
 ) -> str:
     """Call Gemini API."""
     try:
-        google.genai.configure(api_key=settings.gemini_api_key)
-        client = google.genai.GenerativeModel(model)
+        genai.configure(api_key=settings.gemini_api_key)
+        client = genai.GenerativeModel(model)
 
         # Build content with text and optional image
-        content: list[str | google.genai.types.Part] = [prompt]
+        content: list[str | genai.types.Part] = [prompt]
         if image_base64:
             image_data = base64.b64decode(image_base64)
-            image_part = google.genai.types.Part.from_data(data=image_data, mime_type=image_mime_type)
+            image_part = genai.types.Part.from_data(data=image_data, mime_type=image_mime_type)
             content.append(image_part)
 
         response = client.generate_content(content)

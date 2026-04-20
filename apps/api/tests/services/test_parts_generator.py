@@ -135,3 +135,47 @@ class TestGeneratePartsForBuild:
         # Verify json_mode=True was passed
         call_args = mock_generate.call_args
         assert call_args[1].get("json_mode") is True
+
+    @pytest.mark.asyncio
+    @patch("app.services.parts_generator.generate")
+    async def test_generate_parts_includes_specific_requirements(self, mock_generate):
+        """generate_parts_for_build includes specific_requirements in prompt"""
+        mock_generate.return_value = json.dumps({"parts": [], "summary": {}})
+
+        build = {"car": "Civic", "goals": ["swap"]}
+
+        await generate_parts_for_build(build, specific_requirements="19-inch bronze Work wheels")
+
+        call_args = mock_generate.call_args
+        prompt = call_args[0][0]
+
+        assert "19-inch bronze Work wheels" in prompt
+
+    @pytest.mark.asyncio
+    @patch("app.services.parts_generator.generate")
+    async def test_generate_parts_fallback_when_no_requirements(self, mock_generate):
+        """generate_parts_for_build uses fallback when specific_requirements is None"""
+        mock_generate.return_value = json.dumps({"parts": [], "summary": {}})
+
+        build = {"car": "Civic", "goals": ["swap"]}
+
+        await generate_parts_for_build(build, specific_requirements=None)
+
+        call_args = mock_generate.call_args
+        prompt = call_args[0][0]
+
+        assert "None specified" in prompt
+
+    @pytest.mark.asyncio
+    @patch("app.services.parts_generator.generate")
+    async def test_generate_parts_passes_image_to_generate(self, mock_generate):
+        """generate_parts_for_build passes image_base64 to generate function"""
+        mock_generate.return_value = json.dumps({"parts": [], "summary": {}})
+
+        build = {"car": "Civic", "goals": ["swap"]}
+        image_base64 = "fake-image-data"
+
+        await generate_parts_for_build(build, image_base64=image_base64)
+
+        call_args = mock_generate.call_args
+        assert call_args[1].get("image_base64") == image_base64

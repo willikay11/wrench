@@ -29,9 +29,16 @@ class Settings(BaseSettings):
     # Anthropic
     anthropic_api_key: str
 
-    # AI Provider (for vision analysis service)
+    # Conversation AI (text only — use fast/free provider)
     ai_provider: str = "groq"  # "gemini" | "claude" | "groq"
     ai_model: str = "llama-3.3-70b-versatile"
+
+    # Vision AI (image analysis — must support vision)
+    vision_provider: str = "gemini"  # "gemini" | "claude"
+    vision_model: str = "gemini-1.5-flash"
+
+    # API Keys
+    anthropic_api_key: str = ""
     gemini_api_key: str = ""
     groq_api_key: str = ""
 

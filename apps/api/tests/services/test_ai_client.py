@@ -5,6 +5,83 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app.services.ai_client import generate, AIClientError
 
 
+class TestVisionRouting:
+    """Test vision calls route to VISION_PROVIDER automatically"""
+
+    @pytest.mark.asyncio
+    @patch("app.services.ai_client.settings")
+    @patch("app.services.ai_client.genai")
+    async def test_vision_call_routes_to_gemini(self, mock_genai, mock_settings):
+        """Vision call with image routes to Gemini even if AI_PROVIDER=groq"""
+        mock_settings.ai_provider = "groq"
+        mock_settings.ai_model = "llama-3.3-70b-versatile"
+        mock_settings.vision_provider = "gemini"
+        mock_settings.vision_model = "gemini-1.5-flash"
+        mock_settings.gemini_api_key = "test-key"
+        mock_settings.groq_api_key = "test-groq-key"
+
+        mock_model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = "Vision result"
+        mock_model.generate_content.return_value = mock_response
+        mock_genai.GenerativeModel.return_value = mock_model
+
+        image_base64 = base64.b64encode(b"test-image").decode()
+        result = await generate("Analyze image", image_base64=image_base64)
+
+        assert result == "Vision result"
+        # Verify Gemini was called with vision model
+        mock_genai.GenerativeModel.assert_called_once_with("gemini-1.5-flash")
+
+    @pytest.mark.asyncio
+    @patch("app.services.ai_client.settings")
+    @patch("app.services.ai_client._call_groq")
+    async def test_text_only_call_routes_to_groq(self, mock_groq, mock_settings):
+        """Text-only call uses AI_PROVIDER (Groq)"""
+        mock_settings.ai_provider = "groq"
+        mock_settings.ai_model = "llama-3.3-70b-versatile"
+        mock_settings.groq_api_key = "test-key"
+        mock_groq.return_value = "Text result"
+
+        result = await generate("Text prompt")
+
+        assert result == "Text result"
+        mock_groq.assert_called_once_with("Text prompt", False, "llama-3.3-70b-versatile")
+
+    @pytest.mark.asyncio
+    @patch("app.services.ai_client.settings")
+    @patch("app.services.ai_client._call_groq")
+    async def test_force_provider_overrides_routing(self, mock_groq, mock_settings):
+        """force_provider parameter overrides automatic routing"""
+        mock_settings.ai_provider = "groq"
+        mock_settings.ai_model = "llama-3.3-70b-versatile"
+        mock_settings.groq_api_key = "test-key"
+        mock_groq.return_value = "Result"
+
+        # Force use of groq even though we pass json_mode (which normally uses AI_PROVIDER)
+        result = await generate("Prompt", json_mode=True, force_provider="groq")
+
+        assert result == "Result"
+        mock_groq.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("app.services.ai_client.settings")
+    @patch("app.services.ai_client._call_groq")
+    async def test_groq_with_image_raises_error(self, mock_groq, mock_settings):
+        """Groq raises error when image is provided (can't be routed to vision)"""
+        mock_settings.ai_provider = "groq"
+        mock_settings.ai_model = "llama-3.3-70b-versatile"
+        mock_settings.vision_provider = "groq"  # Misconfigured
+        mock_settings.groq_api_key = "test-key"
+
+        image_base64 = base64.b64encode(b"test-image").decode()
+
+        with pytest.raises(AIClientError) as exc_info:
+            await generate("Analyze", image_base64=image_base64, force_provider="groq")
+
+        assert "does not support vision" in str(exc_info.value)
+
+
 class TestGenerateGemini:
     """Test Gemini provider"""
 
@@ -36,8 +113,10 @@ class TestGenerateGemini:
     @patch("app.services.ai_client.genai")
     async def test_generate_passes_image_to_gemini(self, mock_genai, mock_settings):
         """generate() passes image correctly to Gemini when image_base64 provided"""
-        mock_settings.ai_provider = "gemini"
-        mock_settings.ai_model = "gemini-1.5-flash"
+        mock_settings.ai_provider = "groq"
+        mock_settings.ai_model = "llama-3.3-70b-versatile"
+        mock_settings.vision_provider = "gemini"
+        mock_settings.vision_model = "gemini-1.5-flash"
         mock_settings.gemini_api_key = "test-key"
 
         mock_model = MagicMock()
@@ -49,17 +128,17 @@ class TestGenerateGemini:
         # Mock image data
         image_base64 = base64.b64encode(b"fake-image-data").decode()
 
-        with patch("app.services.ai_client.types") as mock_types:
-            mock_image_part = MagicMock()
-            mock_types.Part.from_data.return_value = mock_image_part
+        # Mock genai.types.Part
+        mock_image_part = MagicMock()
+        mock_genai.types.Part.from_data.return_value = mock_image_part
 
-            result = await generate("Analyze this image", image_base64=image_base64, image_mime_type="image/png")
+        result = await generate("Analyze this image", image_base64=image_base64, image_mime_type="image/png")
 
-            assert result == "Image analysis result"
-            # Verify image was decoded and passed to Part.from_data
-            mock_types.Part.from_data.assert_called_once()
-            call_args = mock_types.Part.from_data.call_args
-            assert call_args[1]["mime_type"] == "image/png"
+        assert result == "Image analysis result"
+        # Verify image was decoded and passed to Part.from_data
+        mock_genai.types.Part.from_data.assert_called_once()
+        call_args = mock_genai.types.Part.from_data.call_args
+        assert call_args[1]["mime_type"] == "image/png"
 
     @pytest.mark.asyncio
     @patch("app.services.ai_client.settings")
@@ -135,8 +214,10 @@ class TestGenerateClaude:
     @patch("app.services.ai_client.anthropic")
     async def test_generate_passes_image_to_claude(self, mock_anthropic, mock_settings):
         """generate() passes image correctly to Claude when image_base64 provided"""
-        mock_settings.ai_provider = "claude"
-        mock_settings.ai_model = "claude-3.5-sonnet"
+        mock_settings.ai_provider = "groq"
+        mock_settings.ai_model = "llama-3.3-70b-versatile"
+        mock_settings.vision_provider = "claude"
+        mock_settings.vision_model = "claude-3.5-sonnet"
         mock_settings.anthropic_api_key = "test-key"
 
         mock_client = AsyncMock()
@@ -288,9 +369,10 @@ class TestGenerateGroq:
 
     @pytest.mark.asyncio
     @patch("app.services.ai_client.settings")
-    async def test_generate_raises_error_when_image_provided_with_groq(self, mock_settings):
-        """generate() raises AIClientError when image provided with Groq provider"""
+    async def test_generate_raises_error_when_image_provided_with_groq_as_vision(self, mock_settings):
+        """generate() raises AIClientError when Groq forced as vision provider"""
         mock_settings.ai_provider = "groq"
+        mock_settings.vision_provider = "groq"  # Misconfigured
         mock_settings.groq_api_key = "test-key"
 
         image_base64 = base64.b64encode(b"fake-image-data").decode()
@@ -299,7 +381,7 @@ class TestGenerateGroq:
             await generate("Analyze this", image_base64=image_base64)
 
         assert exc_info.value.provider == "groq"
-        assert "Groq does not support vision" in str(exc_info.value)
+        assert "does not support vision" in str(exc_info.value)
 
     @pytest.mark.asyncio
     @patch("app.services.ai_client.settings")
