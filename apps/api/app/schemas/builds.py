@@ -1,6 +1,6 @@
 # apps/api/app/schemas/builds.py
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -99,8 +99,15 @@ class BuildDetailResponse(BaseModel):
     parts: list[PartResponse] = []
     parts_total: int = 0
     parts_sourced: int = 0
+    vision_data: Optional[dict[str, Any]] = None
 
 
 class BuildImageResponse(BaseModel):
     """Shape of data returned to the client after uploading a build image."""
     image_url: str
+
+
+class GenerateResponse(BaseModel):
+    """Returned after a parts generation request."""
+    parts_created: int
+    build: BuildDetailResponse

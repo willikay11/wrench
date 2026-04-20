@@ -4,8 +4,8 @@ import Image from "next/image"
 import * as React from "react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
-import { updateBuild, uploadBuildImage } from "@/lib/api/builds"
-import type { BuildDetail, Part } from "@/lib/api/builds"
+import { generateParts, updateBuild, uploadBuildImage } from "@/lib/api/builds"
+import type { BuildDetail, Part, VisionData } from "@/lib/api/builds"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -95,6 +95,58 @@ function PartStatusPill({ status }: { status: string }) {
 
 // ── Left panel ────────────────────────────────────────────────────────────
 
+function VisionBadges({ vision }: { vision: VisionData }) {
+  const items = [
+    vision.make && { label: "Make", value: vision.make, conf: vision.confidence?.make },
+    vision.model && { label: "Model", value: vision.model, conf: vision.confidence?.model },
+    vision.year_range && { label: "Year", value: vision.year_range, conf: vision.confidence?.year },
+  ].filter(Boolean) as { label: string; value: string; conf?: number }[]
+
+  if (items.length === 0) return null
+
+  return (
+    <div className="space-y-1 rounded-lg border border-border bg-muted/30 p-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Vision ID
+      </p>
+      {items.map(({ label, value, conf }) => (
+        <div key={label} className="flex items-center justify-between gap-1">
+          <span className="text-xs text-muted-foreground">{label}</span>
+          <span className="flex items-center gap-1 text-xs font-medium">
+            {value}
+            {conf != null && (
+              <span
+                className={cn(
+                  "rounded px-1 py-0.5 text-[10px]",
+                  conf >= 0.8
+                    ? "bg-emerald-100 text-emerald-700"
+                    : conf >= 0.5
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-slate-100 text-slate-500"
+                )}
+              >
+                {Math.round(conf * 100)}%
+              </span>
+            )}
+          </span>
+        </div>
+      ))}
+      {(vision.visible_mods ?? []).length > 0 && (
+        <div className="pt-0.5">
+          <p className="text-[10px] text-muted-foreground">Mods detected:</p>
+          <ul className="mt-0.5 space-y-0.5">
+            {vision.visible_mods!.map((mod) => (
+              <li key={mod} className="text-[11px] text-foreground">
+                · {mod}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function LeftPanel({
   build,
   onImageUploaded,
@@ -116,7 +168,7 @@ function LeftPanel({
       if (!session?.access_token) throw new Error("Not signed in")
       const { image_url } = await uploadBuildImage(build.id, file, session.access_token)
       onImageUploaded(image_url)
-      toast.success("Photo uploaded.")
+      toast.success("Photo uploaded — analysing…")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed")
     } finally {
@@ -184,6 +236,11 @@ function LeftPanel({
         </div>
       </div>
 
+      {/* Vision data — shown when image has been analysed */}
+      {build.vision_data && Object.keys(build.vision_data).length > 0 && (
+        <VisionBadges vision={build.vision_data} />
+      )}
+
       {/* Goals */}
       <div className="space-y-2">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Goals</p>
@@ -243,7 +300,62 @@ function LeftPanel({
 
 // ── Centre panel ──────────────────────────────────────────────────────────
 
-function CentrePanel({ build, state }: { build: BuildDetail; state: WorkspaceState }) {
+function StateBPanel({
+  build,
+  onPartsGenerated,
+}: {
+  build: BuildDetail
+  onPartsGenerated: (updatedBuild: BuildDetail) => void
+}) {
+  const [generating, setGenerating] = React.useState(false)
+
+  async function handleGenerate() {
+    setGenerating(true)
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error("Not signed in")
+      const result = await generateParts(build.id, session.access_token)
+      toast.success(`${result.parts_created} parts generated`)
+      onPartsGenerated(result.build)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Generation failed")
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  return (
+    <main className="flex flex-col items-center justify-center gap-6 p-8">
+      <blockquote className="max-w-md rounded-xl border border-border bg-card px-6 py-4 text-sm italic text-foreground">
+        &ldquo;{build.modification_goal}&rdquo;
+      </blockquote>
+      <Button
+        type="button"
+        disabled={generating}
+        className="bg-brand text-white hover:bg-brand/90"
+        onClick={handleGenerate}
+      >
+        {generating ? "Generating…" : "Generate parts list"}
+      </Button>
+      {generating && (
+        <p className="text-xs text-muted-foreground">
+          Claude is building your parts list — this takes ~15 seconds.
+        </p>
+      )}
+    </main>
+  )
+}
+
+function CentrePanel({
+  build,
+  state,
+  onPartsGenerated,
+}: {
+  build: BuildDetail
+  state: WorkspaceState
+  onPartsGenerated: (updatedBuild: BuildDetail) => void
+}) {
   if (state === "A") {
     return (
       <main className="flex flex-col items-center justify-center gap-3 p-8 text-center">
@@ -261,20 +373,7 @@ function CentrePanel({ build, state }: { build: BuildDetail; state: WorkspaceSta
   }
 
   if (state === "B") {
-    return (
-      <main className="flex flex-col items-center justify-center gap-6 p-8">
-        <blockquote className="max-w-md rounded-xl border border-border bg-card px-6 py-4 text-sm italic text-foreground">
-          &ldquo;{build.modification_goal}&rdquo;
-        </blockquote>
-        <Button
-          type="button"
-          className="bg-brand text-white hover:bg-brand/90"
-          onClick={() => toast.info("Generation coming soon")}
-        >
-          Generate parts list
-        </Button>
-      </main>
-    )
+    return <StateBPanel build={build} onPartsGenerated={onPartsGenerated} />
   }
 
   // State C — has parts
@@ -338,20 +437,30 @@ function CentrePanel({ build, state }: { build: BuildDetail; state: WorkspaceSta
 
 function PartRow({ part }: { part: Part }) {
   return (
-    <div className="flex items-center gap-3 border-b border-border/50 px-4 py-2.5 hover:bg-muted/20">
-      <span className="flex-1 truncate text-sm">{part.name}</span>
-      <PartStatusPill status={part.status} />
-      {part.price_estimate != null && (
-        <span className="w-16 text-right text-xs text-muted-foreground">
-          {formatCurrency(part.price_estimate)}
-        </span>
+    <div className="border-b border-border/50 px-4 py-2.5 hover:bg-muted/20">
+      <div className="flex items-center gap-3">
+        <span className="flex-1 truncate text-sm font-medium">{part.name}</span>
+        <PartStatusPill status={part.status} />
+        {part.price_estimate != null && (
+          <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">
+            {formatCurrency(part.price_estimate)}
+          </span>
+        )}
+        {part.is_safety_critical && (
+          <span title="Safety critical" className="shrink-0 text-red-500">
+            <svg viewBox="0 0 20 20" fill="currentColor" className="size-3.5">
+              <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+            </svg>
+          </span>
+        )}
+      </div>
+      {part.description && (
+        <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{part.description}</p>
       )}
-      {part.is_safety_critical && (
-        <span title="Safety critical" className="text-red-500">
-          <svg viewBox="0 0 20 20" fill="currentColor" className="size-3.5">
-            <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
-          </svg>
-        </span>
+      {part.notes && (
+        <p className="mt-0.5 text-xs text-amber-700 line-clamp-1">
+          <span className="font-medium">Note: </span>{part.notes}
+        </p>
       )}
     </div>
   )
@@ -453,14 +562,21 @@ function AdvisorPanel({ build, state }: { build: BuildDetail; state: WorkspaceSt
 // ── Root ──────────────────────────────────────────────────────────────────
 
 export function BuildWorkspace({ build: initialBuild }: { build: BuildDetail }) {
-  const [imageUrl, setImageUrl] = React.useState(initialBuild.image_url)
-  const build = { ...initialBuild, image_url: imageUrl }
+  const [build, setBuild] = React.useState(initialBuild)
   const state = getState(build)
+
+  function handleImageUploaded(url: string) {
+    setBuild((prev) => ({ ...prev, image_url: url }))
+  }
+
+  function handlePartsGenerated(updatedBuild: BuildDetail) {
+    setBuild(updatedBuild)
+  }
 
   return (
     <div className="grid h-screen grid-cols-[200px_1fr_256px] overflow-hidden">
-      <LeftPanel build={build} onImageUploaded={setImageUrl} />
-      <CentrePanel build={build} state={state} />
+      <LeftPanel build={build} onImageUploaded={handleImageUploaded} />
+      <CentrePanel build={build} state={state} onPartsGenerated={handlePartsGenerated} />
       <AdvisorPanel build={build} state={state} />
     </div>
   )

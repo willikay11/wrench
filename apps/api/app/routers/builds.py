@@ -1,7 +1,7 @@
 import logging
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 
 from app.core.dependencies import CurrentUser, get_current_user
 from app.core.supabase import get_supabase
@@ -11,7 +11,9 @@ from app.schemas.builds import (
     BuildImageResponse,
     BuildResponse,
     BuildUpdate,
+    GenerateResponse,
 )
+from app.services.vision_service import analyse_car_image, generate_parts_for_build
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -36,6 +38,71 @@ def with_parts_detail(build: dict[str, Any]) -> dict[str, Any]:
         1 for p in parts if p.get("status") in ("sourced", "installed")
     )
     return build_data
+
+
+def _insert_parts(
+    supabase: Any,
+    build_id: str,
+    parts: list[dict[str, Any]],
+) -> int:
+    """Delete existing AI parts and insert new ones. Returns count inserted."""
+    if not parts:
+        return 0
+
+    # Remove previously generated parts before re-populating
+    supabase.table("parts").delete().eq("build_id", build_id).execute()
+
+    rows = [{**p, "build_id": build_id} for p in parts]
+    supabase.table("parts").insert(rows).execute()
+    return len(rows)
+
+
+async def _vision_analyse_and_populate(
+    build_id: str,
+    image_bytes: bytes,
+    mime_type: str,
+    access_token: str,
+) -> None:
+    """
+    Background task: run Claude Vision on the uploaded image, persist
+    vision_data to the build, then populate the parts table.
+    """
+    try:
+        supabase = get_supabase(access_token)
+
+        build_row = (
+            supabase.table("builds")
+            .select("goals, modification_goal, donor_car")
+            .eq("id", build_id)
+            .single()
+            .execute()
+        )
+        if not build_row.data:
+            logger.warning("Vision background task: build %s not found", build_id)
+            return
+
+        build_data = cast(dict[str, Any], build_row.data)
+        goals: list[str] = build_data.get("goals") or []
+
+        vision_result = await analyse_car_image(
+            image_bytes,
+            mime_type=mime_type,
+            goals=goals,
+            modification_goal=build_data.get("modification_goal"),
+        )
+
+        # Separate parts from vision metadata before storing
+        suggested_parts = vision_result.pop("suggested_parts", [])
+
+        # Store vision metadata on the build
+        supabase.table("builds").update({"vision_data": vision_result}).eq("id", build_id).execute()
+
+        # Populate parts table
+        count = _insert_parts(supabase, build_id, suggested_parts)
+        logger.info("Vision analysis complete for build %s — %d parts inserted", build_id, count)
+
+    except Exception:
+        logger.exception("Vision background task failed for build %s", build_id)
 
 
 # ── GET /v1/builds ────────────────────────────────────────────────────────
@@ -274,6 +341,7 @@ async def delete_build(build_id: str, user: CurrentUser = Depends(get_current_us
 @router.post("/{build_id}/image", response_model=BuildImageResponse, status_code=status.HTTP_201_CREATED)
 async def upload_build_image(
     build_id: str,
+    background_tasks: BackgroundTasks,
     image: UploadFile = File(...),
     user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -344,4 +412,77 @@ async def upload_build_image(
             detail="Failed to update build image",
         )
 
+    # Kick off vision analysis asynchronously — does not block the response
+    background_tasks.add_task(
+        _vision_analyse_and_populate,
+        build_id,
+        image_bytes,
+        image.content_type or "image/jpeg",
+        user["access_token"],
+    )
+
     return {"image_url": image_url}
+
+
+# ── POST /v1/builds/{id}/generate ────────────────────────────────────────────
+@router.post("/{build_id}/generate", response_model=GenerateResponse)
+async def generate_parts(
+    build_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Generate (or regenerate) the parts list for a build using Claude.
+    Uses the build's goals, car, and modification_goal as context.
+    Any previously generated parts are replaced.
+    """
+    supabase = get_supabase(user["access_token"])
+
+    build_row = (
+        supabase.table("builds")
+        .select("*, parts(*)")
+        .eq("user_id", user["id"])
+        .eq("id", build_id)
+        .single()
+        .execute()
+    )
+
+    if not build_row.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Build not found")
+
+    build_data = cast(dict[str, Any], build_row.data)
+    goals: list[str] = build_data.get("goals") or []
+
+    if not goals:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Build must have at least one goal before generating a parts list",
+        )
+
+    try:
+        suggested_parts = await generate_parts_for_build(
+            car=build_data.get("donor_car"),
+            modification_goal=build_data.get("modification_goal"),
+            goals=goals,
+        )
+    except Exception as exc:
+        logger.exception("Parts generation failed for build %s", build_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Parts generation failed",
+        ) from exc
+
+    count = _insert_parts(supabase, build_id, suggested_parts)
+
+    # Return the updated build with freshly inserted parts
+    fresh = (
+        supabase.table("builds")
+        .select("*, parts(*)")
+        .eq("id", build_id)
+        .single()
+        .execute()
+    )
+
+    return {
+        "parts_created": count,
+        "build": with_parts_detail(cast(dict[str, Any], fresh.data)),
+    }

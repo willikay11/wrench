@@ -29,8 +29,23 @@ export interface Part {
   updated_at: string
 }
 
-export interface BuildDetail extends Build {
+export interface VisionData {
+  make?: string
+  model?: string
+  year_range?: string
+  visible_mods?: string[]
+  engine_hints?: string[]
+  confidence?: { make: number; model: number; year: number }
+}
+
+export interface BuildDetail extends Omit<Build, "vision_data"> {
   parts: Part[]
+  vision_data?: VisionData | null
+}
+
+export interface GenerateResponse {
+  parts_created: number
+  build: BuildDetail
 }
 
 export interface CreateBuildPayload {
@@ -82,6 +97,25 @@ export async function updateBuild(
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(payload),
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Unknown error" }))
+    throw new Error(error.detail ?? `API error ${res.status}`)
+  }
+
+  return res.json()
+}
+
+export async function generateParts(
+  buildId: string,
+  accessToken: string
+): Promise<GenerateResponse> {
+  const res = await fetch(`${CLIENT_API_URL}/v1/builds/${buildId}/generate`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
   })
 
   if (!res.ok) {
