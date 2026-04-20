@@ -42,6 +42,7 @@ export default function HomePage() {
   const [creatingStartTime, setCreatingStartTime] = React.useState<number | null>(null)
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
+  const inputRef = React.useRef<HTMLInputElement>(null)
 
   const scrollToBottom = React.useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -126,7 +127,7 @@ export default function HomePage() {
         setIsLoading(false)
       }
     },
-    [messages, sessionId],
+    [messages, sessionId, pageState],
   )
 
   const handleConfirm = React.useCallback(async () => {
@@ -187,10 +188,13 @@ export default function HomePage() {
     return (
       <div className="flex min-h-screen flex-col bg-background">
         {/* Navbar */}
-        <header className="border-b border-border px-4 py-4">
-          <div className="mx-auto flex max-w-7xl items-center justify-between">
-            <Logo variant="icon" size="md" />
-            <div className="flex gap-2">
+        <header className="h-14 border-b border-border/30 px-4 py-3">
+          <div className="flex items-center justify-between h-full">
+            <div className="flex-1" />
+            <div className="flex-1 flex justify-center">
+              <Logo variant="full" size="md" />
+            </div>
+            <div className="flex-1 flex justify-end gap-2">
               <Link href="/auth/login">
                 <Button variant="outline" size="sm">
                   Sign in
@@ -205,69 +209,62 @@ export default function HomePage() {
           </div>
         </header>
 
-        {/* Main content */}
-        <main className="flex flex-1 items-center justify-center px-4 py-16">
-          <div className="w-full max-w-[520px]">
+        {/* Main content - centered */}
+        <main className="flex flex-1 flex-col items-center justify-center px-4">
+          <div className="w-full max-w-[420px] text-center mb-16">
             {/* Header */}
-            <div className="mb-8 text-center">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-600">
-                AI-powered car builds
-              </p>
-              <h1 className="mb-4 text-4xl font-bold tracking-tight">
-                What are you building?
-              </h1>
-              <p className="text-base text-muted-foreground">
-                Describe your car and what you want to do — Wrench generates your
-                complete parts list in seconds.
-              </p>
-            </div>
-
-            {/* Input card */}
-            <div className="mb-8 rounded-lg border border-border bg-card p-4">
-              <div className="mb-4 flex gap-2">
-                <Input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !isLoading) {
-                      handleSendMessage(input)
-                    }
-                  }}
-                  placeholder="e.g. K24 swap into my E30, or change rims on my WRX..."
-                  disabled={isLoading}
-                  className="flex-1"
-                />
-                <Button
-                  onClick={() => handleSendMessage(input)}
-                  disabled={isLoading || !input.trim()}
-                  size="icon-sm"
-                  className="bg-[#D97706] hover:bg-[#B45309] text-white"
-                >
-                  →
-                </Button>
-              </div>
-
-              {/* Example chips */}
-              <div className="flex flex-wrap gap-2">
-                {idleChips.map((chip) => (
-                  <button
-                    key={chip}
-                    onClick={() => handleChipClick(chip)}
-                    disabled={isLoading}
-                    className="rounded-full border border-border bg-background px-3 py-1.5 text-xs transition-colors hover:border-[#D97706] hover:text-[#D97706] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {chip}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Trust signals */}
-            <div className="text-center text-xs text-muted-foreground">
-              No sign up required · Parts list in seconds · Save when ready
-            </div>
+            <h1 className="mb-4 text-[32px] font-bold leading-tight tracking-tight">
+              What are you building?
+            </h1>
+            <p className="text-base text-foreground/70">
+              Describe your car and what you want to do — Wrench generates your
+              complete parts list in seconds.
+            </p>
           </div>
         </main>
+
+        {/* Input area - anchored to bottom */}
+        <div className="px-4 pb-5">
+          <div className="mx-auto w-full max-w-[680px]">
+            {/* Example chips - above input */}
+            <div className="mb-3 flex flex-wrap gap-2 justify-center">
+              {idleChips.map((chip) => (
+                <button
+                  key={chip}
+                  onClick={() => handleChipClick(chip)}
+                  disabled={isLoading}
+                  className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-[#D97706] hover:text-[#D97706] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+
+            {/* Input */}
+            <div className="flex gap-2">
+              <Input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !isLoading) {
+                    handleSendMessage(input)
+                  }
+                }}
+                placeholder="e.g. K24 swap into my E30..."
+                disabled={isLoading}
+                className="flex-1 min-h-[52px] rounded-xl border border-border bg-card px-4 py-3 text-base placeholder:text-foreground/40 focus:border-[#D97706] focus:outline-none"
+              />
+              <Button
+                onClick={() => handleSendMessage(input)}
+                disabled={isLoading || !input.trim()}
+                className="h-[52px] w-[36px] shrink-0 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white disabled:opacity-50"
+              >
+                →
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -276,12 +273,12 @@ export default function HomePage() {
     return <CreatingState completedSteps={completedSteps} />
   }
 
-  // Chatting state
+  // Chatting state - full viewport
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Navbar */}
-      <header className="border-b border-border px-4 py-4">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
+      <header className="h-14 border-b border-border/30 px-4 py-3 shrink-0">
+        <div className="flex items-center justify-between h-full">
           <Logo variant="icon" size="md" />
           <div className="flex gap-2">
             <Link href="/auth/login">
@@ -298,126 +295,134 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="flex flex-1 items-center justify-center px-4 py-8">
-        <div className="w-full max-w-[520px]">
-          {/* Conversation card */}
-          <div className="rounded-lg border border-border bg-card">
-            {/* Header */}
-            <div className="border-b border-border px-4 py-3 flex items-center gap-2">
-              <span className="size-2 bg-green-600 rounded-full" />
-              <span className="font-medium text-sm">Wrench advisor</span>
-              <span className="text-xs text-muted-foreground ml-auto">
-                {conversationState === "gathering" && "Tell me about your build"}
-                {conversationState === "confirming" && "Ready to create?"}
-                {conversationState === "ready" && "Creating..."}
-              </span>
-            </div>
-
-            {/* Messages */}
-            <div className="min-h-[280px] max-h-[60vh] overflow-y-auto flex flex-col gap-3 p-4">
-              {messages.map((msg, i) => (
+      {/* Messages area - fills middle space */}
+      <main className="flex-1 overflow-y-auto px-4 py-6">
+        <div className="mx-auto w-full max-w-[680px]">
+          <div className="flex flex-col gap-4">
+            {messages.map((msg, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "flex gap-3 text-base",
+                  msg.role === "assistant" ? "justify-start" : "justify-end"
+                )}
+              >
+                {msg.role === "assistant" && (
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center">
+                    <span className="size-1.5 rounded-full bg-[#D97706]" />
+                  </div>
+                )}
                 <div
-                  key={i}
                   className={cn(
-                    "max-w-[85%] rounded-lg px-4 py-3 text-sm",
+                    "max-w-[60%] whitespace-pre-wrap leading-relaxed",
                     msg.role === "assistant"
-                      ? "self-start bg-secondary text-secondary-foreground rounded-[4px_12px_12px_12px]"
-                      : "self-end bg-[#D97706] text-white rounded-[12px_4px_12px_12px]",
+                      ? "text-foreground"
+                      : "rounded-2xl bg-[#D97706] px-4 py-2.5 text-white"
                   )}
                 >
-                  <p className="whitespace-pre-line">{msg.content}</p>
+                  {msg.content}
                 </div>
-              ))}
+              </div>
+            ))}
 
-              {isLoading && (
-                <div className="self-start flex gap-1 py-3 px-4">
-                  <span className="size-2 bg-secondary rounded-full animate-bounce" />
+            {isLoading && (
+              <div className="flex gap-3 justify-start">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center">
+                  <span className="size-1.5 rounded-full bg-[#D97706]" />
+                </div>
+                <div className="flex gap-1.5 items-center py-2">
+                  <span className="size-1.5 bg-foreground/40 rounded-full animate-bounce" />
                   <span
-                    className="size-2 bg-secondary rounded-full animate-bounce"
+                    className="size-1.5 bg-foreground/40 rounded-full animate-bounce"
                     style={{ animationDelay: "0.1s" }}
                   />
                   <span
-                    className="size-2 bg-secondary rounded-full animate-bounce"
+                    className="size-1.5 bg-foreground/40 rounded-full animate-bounce"
                     style={{ animationDelay: "0.2s" }}
                   />
                 </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Confirmation card */}
-            {conversationState === "confirming" && (
-              <div className="border-t border-border px-4 py-3 bg-green-50 dark:bg-green-950">
-                <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-2">
-                  Ready to build
-                </p>
-                <p className="font-medium text-sm text-foreground mb-1">
-                  {extracted.car}
-                </p>
-                <p className="text-sm text-muted-foreground mb-1">
-                  {extracted.goal}
-                </p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {extracted.use_case}
-                </p>
-                <Button
-                  onClick={handleConfirm}
-                  disabled={isLoading}
-                  className="w-full bg-brand text-white hover:bg-brand/90"
-                >
-                  Yes, generate my parts list →
-                </Button>
               </div>
             )}
 
-            {/* Chips and input */}
-            {conversationState !== "confirming" && (
-              <>
-                {conversationChips.length > 0 && (
-                  <div className="border-t border-border px-4 py-3 flex flex-wrap gap-2">
-                    {conversationChips.map((chip) => (
-                      <button
-                        key={chip}
-                        onClick={() => handleChipClick(chip)}
-                        disabled={isLoading}
-                        className="rounded-full border border-border bg-background px-3 py-1.5 text-xs transition-colors hover:border-[#D97706] hover:text-[#D97706] disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {chip}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <div className="border-t border-border px-4 py-3 flex gap-2">
-                  <Input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !isLoading) {
-                        handleSendMessage(input)
-                      }
-                    }}
-                    placeholder="Type here..."
-                    disabled={isLoading}
-                    autoFocus
-                    className="flex-1"
-                  />
-                  <Button
-                    onClick={() => handleSendMessage(input)}
-                    disabled={isLoading || !input.trim()}
-                    size="icon-sm"
-                    className="bg-[#D97706] hover:bg-[#B45309] text-white"
-                  >
-                    →
-                  </Button>
-                </div>
-              </>
-            )}
+            <div ref={messagesEndRef} />
           </div>
         </div>
       </main>
+
+      {/* Confirmation card - between messages and input */}
+      {conversationState === "confirming" && (
+        <div className="px-4 py-4 shrink-0">
+          <div className="mx-auto w-full max-w-[680px] rounded-xl border border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950/30 p-4">
+            <p className="text-xs font-medium text-green-700 dark:text-green-400 mb-3">
+              Ready to build
+            </p>
+            <p className="font-medium text-sm text-foreground mb-1">
+              {extracted.car}
+            </p>
+            <p className="text-sm text-foreground/70 mb-1">
+              {extracted.goal}
+            </p>
+            <p className="text-sm text-foreground/70 mb-4">
+              {extracted.use_case}
+            </p>
+            <Button
+              onClick={handleConfirm}
+              disabled={isLoading}
+              className="w-full bg-brand text-white hover:bg-brand/90"
+            >
+              Yes, generate my parts list →
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Input area - anchored to bottom */}
+      {conversationState !== "confirming" && (
+        <div className="px-4 pb-5 shrink-0 border-t border-border/30">
+          <div className="mx-auto w-full max-w-[680px] pt-4">
+            {/* Chips above input if needed */}
+            {conversationChips.length > 0 && (
+              <div className="mb-3 flex gap-2">
+                {conversationChips.map((chip) => (
+                  <button
+                    key={chip}
+                    onClick={() => handleChipClick(chip)}
+                    disabled={isLoading}
+                    className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-[#D97706] hover:text-[#D97706] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Input */}
+            <div className="flex gap-2">
+              <Input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !isLoading) {
+                    handleSendMessage(input)
+                  }
+                }}
+                placeholder="Type here..."
+                disabled={isLoading}
+                autoFocus
+                className="flex-1 min-h-[52px] rounded-xl border border-border bg-card px-4 py-3 text-base placeholder:text-foreground/40 focus:border-[#D97706] focus:outline-none"
+              />
+              <Button
+                onClick={() => handleSendMessage(input)}
+                disabled={isLoading || !input.trim()}
+                className="h-[52px] w-[36px] shrink-0 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white disabled:opacity-50"
+              >
+                →
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

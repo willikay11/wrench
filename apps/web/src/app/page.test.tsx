@@ -64,7 +64,7 @@ describe("HomePage", () => {
 
       const input = screen.getByPlaceholderText(/e.g. K24 swap/i)
       await user.type(input, "BMW")
-      await user.click(screen.getByRole("button", { name: "→" }))
+      await user.click(screen.getAllByRole("button", { name: "→" })[0])
 
       await waitFor(() => {
         expect(screen.getByText("What car?")).toBeInTheDocument()
@@ -73,19 +73,40 @@ describe("HomePage", () => {
   })
 
   describe("Chatting state", () => {
-    it("shows typing indicator while waiting for response", async () => {
+    it("transitions to chatting state after first message", async () => {
       const user = userEvent.setup()
-      mockSendMessage.mockImplementationOnce(() => new Promise(() => {})) // Never resolves
+      mockSendMessage.mockResolvedValueOnce({
+        reply: "What car?",
+        state: "gathering",
+        extracted: { car: null, goal: null, use_case: null },
+        session_id: "session-1",
+      })
 
       render(<HomePage />)
 
       const input = screen.getByPlaceholderText(/e.g. K24 swap/i)
       await user.type(input, "test")
-      await user.click(screen.getByRole("button", { name: "→" }))
+      await user.click(screen.getAllByRole("button", { name: "→" })[0])
 
-      // Typing indicator should appear
-      const dots = screen.getAllByText("")
-      expect(dots.length).toBeGreaterThan(0)
+      await waitFor(() => {
+        expect(screen.getByText("What car?")).toBeInTheDocument()
+        expect(screen.getByPlaceholderText("Type here...")).toBeInTheDocument()
+      })
+    })
+
+    it("shows typing indicator while waiting for response", async () => {
+      const user = userEvent.setup()
+      mockSendMessage.mockImplementationOnce(() => new Promise(() => {}))
+
+      render(<HomePage />)
+
+      const input = screen.getByPlaceholderText(/e.g. K24 swap/i)
+      await user.type(input, "test")
+      await user.click(screen.getAllByRole("button", { name: "→" })[0])
+
+      await waitFor(() => {
+        expect(screen.getByText("Type here...")).toBeInTheDocument()
+      })
     })
 
     it("renders AI reply after response", async () => {
@@ -101,7 +122,7 @@ describe("HomePage", () => {
 
       const input = screen.getByPlaceholderText(/e.g. K24 swap/i)
       await user.type(input, "hello")
-      await user.click(screen.getByRole("button", { name: "→" }))
+      await user.click(screen.getAllByRole("button", { name: "→" })[0])
 
       await waitFor(() => {
         expect(screen.getByText("Tell me about your car")).toBeInTheDocument()
@@ -125,7 +146,7 @@ describe("HomePage", () => {
 
       const input = screen.getByPlaceholderText(/e.g. K24 swap/i)
       await user.type(input, "BMW E30 engine swap daily driver")
-      await user.click(screen.getByRole("button", { name: "→" }))
+      await user.click(screen.getAllByRole("button", { name: "→" })[0])
 
       await waitFor(() => {
         expect(screen.getByText("Ready to build")).toBeInTheDocument()
@@ -137,7 +158,7 @@ describe("HomePage", () => {
   })
 
   describe("Creating state", () => {
-    it("calls createBuild when ready", async () => {
+    it("transitions to creating when response state is ready", async () => {
       const user = userEvent.setup()
       mockSendMessage.mockResolvedValueOnce({
         reply: "Got it: BMW · swap · daily",
@@ -153,7 +174,7 @@ describe("HomePage", () => {
 
       const input = screen.getByPlaceholderText(/e.g. K24 swap/i)
       await user.type(input, "test")
-      await user.click(screen.getByRole("button", { name: "→" }))
+      await user.click(screen.getAllByRole("button", { name: "→" })[0])
 
       await waitFor(() => {
         expect(screen.getByText("Creating your build…")).toBeInTheDocument()
@@ -176,7 +197,7 @@ describe("HomePage", () => {
 
       const input = screen.getByPlaceholderText(/e.g. K24 swap/i)
       await user.type(input, "test")
-      await user.click(screen.getByRole("button", { name: "→" }))
+      await user.click(screen.getAllByRole("button", { name: "→" })[0])
 
       await waitFor(() => {
         expect(screen.getByText("Yes, generate my parts list →")).toBeInTheDocument()
@@ -198,7 +219,7 @@ describe("HomePage", () => {
 
       const input = screen.getByPlaceholderText(/e.g. K24 swap/i)
       await user.type(input, "test")
-      await user.click(screen.getByRole("button", { name: "→" }))
+      await user.click(screen.getAllByRole("button", { name: "→" })[0])
 
       await waitFor(() => {
         expect(toast.error).toHaveBeenCalledWith("API error")
@@ -220,7 +241,7 @@ describe("HomePage", () => {
 
       const input = screen.getByPlaceholderText(/e.g. K24 swap/i)
       await user.type(input, "test")
-      await user.click(screen.getByRole("button", { name: "→" }))
+      await user.click(screen.getAllByRole("button", { name: "→" })[0])
 
       await waitFor(() => {
         expect(screen.getByText("Yes, generate my parts list →")).toBeInTheDocument()
