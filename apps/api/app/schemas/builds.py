@@ -111,3 +111,18 @@ class GenerateResponse(BaseModel):
     """Returned after a parts generation request."""
     parts_created: int
     build: BuildDetailResponse
+
+
+class GeneratePartsRequest(BaseModel):
+    """Request to generate parts for a build."""
+    force_regenerate: bool = False
+
+
+class GeneratePartsResponse(BaseModel):
+    """Response after generating parts for a build."""
+    build_id: str
+    parts: list[PartResponse]
+    total_parts: int
+    estimated_total: float
+    safety_critical_count: int
+    message: str

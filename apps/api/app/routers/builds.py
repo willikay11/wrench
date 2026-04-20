@@ -11,9 +11,14 @@ from app.schemas.builds import (
     BuildImageResponse,
     BuildResponse,
     BuildUpdate,
+    GeneratePartsRequest,
+    GeneratePartsResponse,
     GenerateResponse,
+    PartResponse,
 )
-from app.services.vision_service import analyse_car_image, generate_parts_for_build
+from app.services.vision_service import analyse_car_image
+from app.services.parts_generator import generate_parts_for_build
+from app.services.ai_client import AIClientError
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -486,3 +491,175 @@ async def generate_parts(
         "parts_created": count,
         "build": with_parts_detail(cast(dict[str, Any], fresh.data)),
     }
+
+
+# ── POST /v1/builds/{id}/parts/generate ──────────────────────────────────────
+@router.post("/{build_id}/parts/generate", response_model=GeneratePartsResponse)
+async def generate_parts_for_build_new(
+    build_id: str,
+    payload: GeneratePartsRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Generate parts for a build with force_regenerate option.
+    If parts already exist and force_regenerate=False, returns existing parts.
+    If force_regenerate=True or no parts exist, generates new parts.
+    """
+    supabase = get_supabase(user["access_token"])
+
+    # Verify build ownership and get build data
+    build_row = (
+        supabase.table("builds")
+        .select("*, parts(*)")
+        .eq("user_id", user["id"])
+        .eq("id", build_id)
+        .single()
+        .execute()
+    )
+
+    if not build_row.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Build not found")
+
+    build_data = cast(dict[str, Any], build_row.data)
+    existing_parts = cast(list[dict[str, Any]], build_data.get("parts", []) or [])
+
+    # If parts exist and not forcing regenerate, return them
+    if existing_parts and not payload.force_regenerate:
+        estimated_total = sum(float(p.get("price_estimate") or 0) for p in existing_parts)
+        safety_critical_count = sum(1 for p in existing_parts if p.get("is_safety_critical"))
+        return {
+            "build_id": build_id,
+            "parts": existing_parts,
+            "total_parts": len(existing_parts),
+            "estimated_total": estimated_total,
+            "safety_critical_count": safety_critical_count,
+            "message": f"Loaded {len(existing_parts)} existing parts.",
+        }
+
+    # Generate new parts
+    goals: list[str] = build_data.get("goals") or []
+    if not goals:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Build must have at least one goal before generating a parts list",
+        )
+
+    try:
+        result = await generate_parts_for_build({
+            "car": build_data.get("donor_car"),
+            "modification_goal": build_data.get("modification_goal"),
+            "goals": goals,
+        })
+        parts_to_insert = result.get("parts", [])
+
+        # Normalize categories to lowercase
+        for part in parts_to_insert:
+            if part.get("category"):
+                part["category"] = part["category"].lower()
+    except AIClientError as exc:
+        logger.error("Parts generation AI error: %s", exc.message)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Parts generation failed — please try again",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Parts generation failed for build %s", build_id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Parts generation failed — please try again",
+        ) from exc
+
+    # Insert parts into database
+    _insert_parts(supabase, build_id, parts_to_insert)
+
+    # Fetch updated parts with all fields
+    fresh = (
+        supabase.table("builds")
+        .select("*, parts(*)")
+        .eq("id", build_id)
+        .single()
+        .execute()
+    )
+
+    fresh_data = cast(dict[str, Any], fresh.data)
+    parts = cast(list[dict[str, Any]], fresh_data.get("parts", []) or [])
+    estimated_total = sum(float(p.get("price_estimate") or 0) for p in parts)
+    safety_critical_count = sum(1 for p in parts if p.get("is_safety_critical"))
+    message = result.get("summary", {}).get("message", f"Generated {len(parts)} parts.")
+
+    return {
+        "build_id": build_id,
+        "parts": parts,
+        "total_parts": len(parts),
+        "estimated_total": estimated_total,
+        "safety_critical_count": safety_critical_count,
+        "message": message,
+    }
+
+
+# ── PATCH /v1/builds/{id}/parts/{part_id} ────────────────────────────────────
+@router.patch("/{build_id}/parts/{part_id}", response_model=PartResponse)
+async def update_part(
+    build_id: str,
+    part_id: str,
+    payload: dict[str, Any],
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Update a single part's status, notes, or vendor info.
+    Verifies the user owns the build that contains this part.
+    """
+    supabase = get_supabase(user["access_token"])
+
+    # Verify build ownership
+    build_check = (
+        supabase.table("builds")
+        .select("id")
+        .eq("user_id", user["id"])
+        .eq("id", build_id)
+        .single()
+        .execute()
+    )
+
+    if not build_check.data:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+    # Get the part and verify it belongs to this build
+    part_check = (
+        supabase.table("parts")
+        .select("id")
+        .eq("id", part_id)
+        .eq("build_id", build_id)
+        .single()
+        .execute()
+    )
+
+    if not part_check.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Part not found")
+
+    # Build update dict from allowed fields
+    update_data: dict[str, Any] = {}
+    for key in ("status", "notes", "vendor_url", "vendor_name"):
+        if key in payload:
+            update_data[key] = payload[key]
+
+    if not update_data:
+        # No updates requested, return existing part
+        part = supabase.table("parts").select("*").eq("id", part_id).single().execute()
+        return cast(dict[str, Any], part.data)
+
+    # Update the part
+    result = (
+        supabase.table("parts")
+        .update(update_data)
+        .eq("id", part_id)
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update part",
+        )
+
+    return cast(dict[str, Any], result.data[0])

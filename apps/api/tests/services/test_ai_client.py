@@ -257,3 +257,111 @@ class TestReturnValues:
 
         assert isinstance(result, str)
         assert result == "Plain text response"
+
+
+class TestGenerateGroq:
+    """Test Groq provider"""
+
+    @pytest.mark.asyncio
+    @patch("app.services.ai_client.settings")
+    @patch("app.services.ai_client.AsyncGroq")
+    async def test_generate_calls_groq_when_provider_is_groq(self, mock_async_groq, mock_settings):
+        """generate() calls Groq when AI_PROVIDER=groq"""
+        mock_settings.ai_provider = "groq"
+        mock_settings.ai_model = "llama-3.3-70b-versatile"
+        mock_settings.groq_api_key = "test-groq-key"
+
+        # Mock the async client
+        mock_client = AsyncMock()
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message.content = "Groq response"
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        mock_async_groq.return_value = mock_client
+
+        result = await generate("Test prompt")
+
+        assert result == "Groq response"
+        mock_async_groq.assert_called_once_with(api_key="test-groq-key")
+        mock_client.chat.completions.create.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("app.services.ai_client.settings")
+    async def test_generate_raises_error_when_image_provided_with_groq(self, mock_settings):
+        """generate() raises AIClientError when image provided with Groq provider"""
+        mock_settings.ai_provider = "groq"
+        mock_settings.groq_api_key = "test-key"
+
+        image_base64 = base64.b64encode(b"fake-image-data").decode()
+
+        with pytest.raises(AIClientError) as exc_info:
+            await generate("Analyze this", image_base64=image_base64)
+
+        assert exc_info.value.provider == "groq"
+        assert "Groq does not support vision" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    @patch("app.services.ai_client.settings")
+    @patch("app.services.ai_client.AsyncGroq")
+    async def test_generate_appends_json_instruction_for_groq(self, mock_async_groq, mock_settings):
+        """generate() appends JSON instruction when json_mode=True for Groq"""
+        mock_settings.ai_provider = "groq"
+        mock_settings.ai_model = "llama-3.3-70b-versatile"
+        mock_settings.groq_api_key = "test-key"
+
+        mock_client = AsyncMock()
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message.content = '{"result": "data"}'
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        mock_async_groq.return_value = mock_client
+
+        result = await generate("Return data", json_mode=True)
+
+        assert result == '{"result": "data"}'
+        # Verify json_object response format was used
+        call_args = mock_client.chat.completions.create.call_args
+        assert call_args[1]["response_format"] == {"type": "json_object"}
+
+    @pytest.mark.asyncio
+    @patch("app.services.ai_client.settings")
+    @patch("app.services.ai_client.AsyncGroq")
+    async def test_generate_raises_ai_client_error_on_groq_failure(self, mock_async_groq, mock_settings):
+        """generate() raises AIClientError when Groq throws"""
+        mock_settings.ai_provider = "groq"
+        mock_settings.ai_model = "llama-3.3-70b-versatile"
+        mock_settings.groq_api_key = "test-key"
+
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(side_effect=Exception("API error"))
+        mock_async_groq.return_value = mock_client
+
+        with pytest.raises(AIClientError) as exc_info:
+            await generate("Test prompt")
+
+        assert exc_info.value.provider == "groq"
+        assert "API error" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    @patch("app.services.ai_client.settings")
+    @patch("app.services.ai_client.AsyncGroq")
+    async def test_generate_returns_plain_string_for_groq(self, mock_async_groq, mock_settings):
+        """generate() returns the text response as a plain string for Groq"""
+        mock_settings.ai_provider = "groq"
+        mock_settings.ai_model = "llama-3.3-70b-versatile"
+        mock_settings.groq_api_key = "test-key"
+
+        mock_client = AsyncMock()
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message.content = "Plain text response"
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        mock_async_groq.return_value = mock_client
+
+        result = await generate("Prompt")
+
+        assert isinstance(result, str)
+        assert result == "Plain text response"

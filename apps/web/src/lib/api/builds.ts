@@ -48,6 +48,15 @@ export interface GenerateResponse {
   build: BuildDetail
 }
 
+export interface GeneratePartsResponse {
+  build_id: string
+  parts: Part[]
+  total_parts: number
+  estimated_total: number
+  safety_critical_count: number
+  message: string
+}
+
 export interface CreateBuildPayload {
   title: string
   car?: string
@@ -116,6 +125,28 @@ export async function generateParts(
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Unknown error" }))
+    throw new Error(error.detail ?? `API error ${res.status}`)
+  }
+
+  return res.json()
+}
+
+export async function generatePartsNew(
+  buildId: string,
+  accessToken: string,
+  forceRegenerate: boolean = false
+): Promise<GeneratePartsResponse> {
+  const res = await fetch(`${CLIENT_API_URL}/v1/builds/${buildId}/parts/generate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ force_regenerate: forceRegenerate }),
   })
 
   if (!res.ok) {

@@ -30,9 +30,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str
 
     # AI Provider (for vision analysis service)
-    ai_provider: str = "gemini"  # "gemini" | "claude"
-    ai_model: str = "gemini-1.5-flash"  # swap to claude-sonnet-4-20250514 for prod
+    ai_provider: str = "groq"  # "gemini" | "claude" | "groq"
+    ai_model: str = "llama-3.3-70b-versatile"
     gemini_api_key: str = ""
+    groq_api_key: str = ""
 
     # Internal auth (shared secret between web and api)
     internal_api_secret: str

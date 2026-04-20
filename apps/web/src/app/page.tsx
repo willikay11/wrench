@@ -9,7 +9,7 @@ import { Logo } from "@/components/brand/logo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { createClient } from "@/lib/supabase/client"
-import { createBuild } from "@/lib/api/builds"
+import { createBuild, generatePartsNew } from "@/lib/api/builds"
 import {
   type ConversationMessage,
   type ExtractedContext,
@@ -131,40 +131,80 @@ export default function HomePage() {
   )
 
   const handleConfirm = React.useCallback(async () => {
+    console.log("handleConfirm called!")
     setPageState("creating")
-    setCreatingStartTime(Date.now())
+    const startTime = Date.now()
+    setCreatingStartTime(startTime)
     setCompletedSteps(0)
 
+    let buildId: string | null = null
+
     try {
+      console.log("handleConfirm: entered try block")
       const supabase = createClient()
+      console.log("handleConfirm: created supabase client")
       const { data: { session } } = await supabase.auth.getSession()
+      console.log("handleConfirm: got session:", session ? "yes" : "no", session?.access_token ? "has token" : "no token")
       if (!session?.access_token) throw new Error("Not authenticated")
+      console.log("handleConfirm: session authenticated")
 
-      const created = await createBuild(
-        {
-          title: `${extracted.car} — ${extracted.goal}`,
-          car: extracted.car || undefined,
-          goals: extracted.goal ? [extracted.goal] : [],
-          modification_goal: extracted.goal && extracted.use_case
-            ? `${extracted.goal} — ${extracted.use_case}`
-            : undefined,
-        },
-        session.access_token,
-      )
+      // Step 1: Create build
+      console.log("Starting build creation with extracted:", extracted)
+      const buildPayload = {
+        title: `${extracted.car} — ${extracted.goal}`,
+        car: extracted.car || undefined,
+        goals: extracted.goal ? [extracted.goal] : [],
+        modification_goal: extracted.goal && extracted.use_case
+          ? `${extracted.goal} — ${extracted.use_case}`
+          : undefined,
+      }
+      console.log("Build payload:", buildPayload)
+      const created = await createBuild(buildPayload, session.access_token)
+      console.log("createBuild response:", created)
+      buildId = created.id
+      console.log("Build created with id:", buildId)
+      setCompletedSteps(1)
 
-      const elapsed = Date.now() - (creatingStartTime || 0)
-      const remaining = Math.max(1500 - elapsed, 0)
+      // Step 2: Generate parts (with timeout)
+      try {
+        const partsPromise = generatePartsNew(created.id, session.access_token, false)
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Parts generation timeout")), 8000)
+        )
+        await Promise.race([partsPromise, timeoutPromise])
+      } catch (partsErr) {
+        // Parts generation failed but build succeeded - continue anyway
+        console.error("Parts generation error:", partsErr)
+        toast.error("Build created but parts generation failed — you can generate from the workspace")
+      }
+      setCompletedSteps(2)
 
+      // Step 3: Brief pause for visual feedback
+      const elapsed = Date.now() - startTime
+      const remaining = Math.max(2000 - elapsed, 300)
+      console.log("Elapsed:", elapsed, "Remaining:", remaining, "BuildId:", buildId)
+      setCompletedSteps(3)
+
+      // Step 4: Redirect - wait for animation to complete
       setTimeout(() => {
-        router.push(`/builds/${created.id}`)
+        console.log("Redirect callback firing, buildId:", buildId)
+        if (buildId) {
+          console.log("Pushing to /builds/" + buildId)
+          router.push(`/builds/${buildId}`)
+        } else {
+          console.error("No buildId available for redirect")
+        }
       }, remaining)
+
+      console.log("Redirect timeout set for", remaining, "ms")
     } catch (err) {
+      console.error("Build creation error:", err)
       toast.error(
         err instanceof Error ? err.message : "Failed to create build",
       )
       setPageState("chatting")
     }
-  }, [extracted, router, creatingStartTime])
+  }, [extracted, router])
 
   const handleChipClick = (chipText: string) => {
     handleSendMessage(chipText)

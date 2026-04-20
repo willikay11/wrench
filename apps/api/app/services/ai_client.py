@@ -4,8 +4,8 @@ import logging
 from typing import Optional
 
 import anthropic
-import google.generativeai as genai
-from google.generativeai import types
+import google.genai
+from groq import AsyncGroq
 
 from app.core.config import settings
 
@@ -28,7 +28,7 @@ async def generate(
     json_mode: bool = False,
 ) -> str:
     """
-    Generate text using the configured AI provider (Gemini or Claude).
+    Generate text using the configured AI provider (Gemini, Claude, or Groq).
 
     Args:
         prompt: The text prompt to send to the model
@@ -45,6 +45,13 @@ async def generate(
     provider = settings.ai_provider.lower()
     model = settings.ai_model
 
+    # Check for vision requests with Groq (not supported)
+    if provider == "groq" and image_base64:
+        raise AIClientError(
+            "Groq does not support vision. Set AI_PROVIDER=gemini for image inputs.",
+            "groq"
+        )
+
     # Add JSON instruction if requested
     if json_mode:
         prompt = f"{prompt}\n\nReturn only valid JSON. No markdown, no explanation."
@@ -53,6 +60,8 @@ async def generate(
         return await _generate_gemini(prompt, image_base64, image_mime_type, model)
     elif provider == "claude":
         return await _generate_claude(prompt, image_base64, image_mime_type, model)
+    elif provider == "groq":
+        return await _call_groq(prompt, json_mode, model)
     else:
         raise AIClientError(f"Unknown provider: {provider}", provider)
 
@@ -65,14 +74,14 @@ async def _generate_gemini(
 ) -> str:
     """Call Gemini API."""
     try:
-        genai.configure(api_key=settings.gemini_api_key)
-        client = genai.GenerativeModel(model)
+        google.genai.configure(api_key=settings.gemini_api_key)
+        client = google.genai.GenerativeModel(model)
 
         # Build content with text and optional image
-        content: list[str | types.Part] = [prompt]
+        content: list[str | google.genai.types.Part] = [prompt]
         if image_base64:
             image_data = base64.b64decode(image_base64)
-            image_part = types.Part.from_data(data=image_data, mime_type=image_mime_type)
+            image_part = google.genai.types.Part.from_data(data=image_data, mime_type=image_mime_type)
             content.append(image_part)
 
         response = client.generate_content(content)
@@ -133,3 +142,29 @@ async def _generate_claude(
         error_msg = str(exc)
         logger.exception("Claude API call failed: %s", error_msg)
         raise AIClientError(error_msg, "claude") from exc
+
+
+async def _call_groq(
+    prompt: str,
+    json_mode: bool = False,
+    model: str = "llama-3.3-70b-versatile",
+) -> str:
+    """Call Groq API."""
+    try:
+        client = AsyncGroq(api_key=settings.groq_api_key)
+
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"} if json_mode else None,
+            temperature=0.7,
+        )
+
+        text = response.choices[0].message.content
+        logger.info("Generated text using Groq model %s", model)
+        return text
+
+    except Exception as exc:
+        error_msg = str(exc)
+        logger.exception("Groq API call failed: %s", error_msg)
+        raise AIClientError(error_msg, "groq") from exc
