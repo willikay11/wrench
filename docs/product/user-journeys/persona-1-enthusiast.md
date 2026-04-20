@@ -10,11 +10,11 @@
 flowchart TD
     A["😎 Alex lands on Wrench<br/>Motivated by Reddit r/Civic post"] --> B["Sees: 'What are you building?'"]
     B --> C["Types in chat:<br/>'Want to put a K20 in my 2018 Civic'"]
-    C --> D{["Advisor clarifies<br/>Question 1 of 3"]}
+    C --> D{"Advisor clarifies<br/>Question 1 of 3"}
     D -->|"Do you want K20Z3 or K24?"| E["Alex: 'Z3, more common'"]
-    E --> F{["Advisor clarifies<br/>Question 2 of 3"]}
+    E --> F{"Advisor clarifies<br/>Question 2 of 3"}
     F -->|"Stock suspension or<br/>upgrade too?"| G["Alex: 'Yeah, coilovers,<br/>sway bars, bracing'"]
-    G --> H{["Advisor clarifies<br/>Question 3 of 3"]}
+    G --> H{"Advisor clarifies<br/>Question 3 of 3"}
     H -->|"Daily driver or<br/>track-only?"| I["Alex: 'Mix of both,<br/>spirited drives'"]
     I --> J["🎯 Build summary appears<br/>K20Z3 + suspension,<br/>daily/track goals"]
     J --> K["Alex: 'Looks good, build it'"]
