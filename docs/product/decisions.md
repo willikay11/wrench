@@ -249,7 +249,44 @@ Role-based access enables this without opening security holes.
 
 Current RLS policy (`Users can manage own builds`) will need refactoring.
 
-## 9. Cost Tracking and Budget Variance
+## 9. Guest Mode with Anonymous Authentication
+
+### Decision
+Users do not need to sign up before creating their first build.
+
+On the home page:
+1. Click "What are you building?" → No sign-in required
+2. Chat with the AI advisor and build understanding
+3. Confirm the build → `supabase.auth.signInAnonymously()` creates a guest session
+4. Build is created under the anonymous user_id
+5. User can view the build immediately
+6. If they want to save across devices, they sign up/login (at which point they can merge the anonymous session)
+
+### Why
+
+**Maximizes time-to-value.** Asking users to sign up before they've seen value is friction. Let them experience Wrench first, then earn their account.
+
+Casual users might never sign up (that's fine—they got value). Engaged users will sign up to sync across devices or share with friends.
+
+Anonymous sessions in Supabase are free and lightweight. The conversion path is clear: guest → signed-up user.
+
+### Evidence
+
+Freemium products (Figma, Notion, Canva) show sign-up friction is the #1 drop-off point. Remove it upfront, and more users explore.
+
+### Implementation
+
+- Home page has no auth requirement (public route)
+- Conversation endpoint is unauthenticated (GET health check + POST message)
+- `createBuild()` requires auth, so AI advisor says "Confirming your build" just before the silent `signInAnonymously()` call
+- RLS policies permit anonymous users to create/view their own builds
+- If a user signs up later, we show a prompt: "Sign in to save this build to your account"
+
+### Tradeoff
+
+Anonymous users cannot sync across devices until they sign up. But this is the conversion moment—they've already invested time understanding their build.
+
+## 10. Cost Tracking and Budget Variance
 
 ### Decision
 **Currently:** We show estimated price per part and total project cost.
@@ -292,6 +329,7 @@ See [Architecture Decision Records](../engineering/adr/) for technical decisions
 | 2026-03-31 | Mechanic connection at end | ✅ Implemented |
 | 2026-03-31 | AI provider abstraction | ✅ Implemented |
 | 2026-04-15 | Build visibility (private by default) | ✅ Implemented |
+| 2026-04-20 | Guest mode with anonymous auth | ✅ Implemented |
 | TBD | Parts sourcing integration | 🔲 Planned |
 | TBD | Team/shared builds | 🔲 Planned |
 | TBD | Cost tracking | 🔲 Planned |

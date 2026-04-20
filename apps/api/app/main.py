@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import builds, parts, advisor, vision
+from app.routers import builds, parts, advisor, vision, conversation
 
 app = FastAPI(
     title="Wrench API",
@@ -22,6 +22,7 @@ app.include_router(builds.router, prefix="/v1/builds", tags=["builds"])
 app.include_router(parts.router, prefix="/v1/builds/{build_id}/parts", tags=["parts"])
 app.include_router(advisor.router, prefix="/v1/builds/{build_id}/conversation", tags=["advisor"])
 app.include_router(vision.router, prefix="/v1/vision", tags=["vision"])
+app.include_router(conversation.router, prefix="/v1/conversation", tags=["conversation"])
 
 
 @app.get("/health")
