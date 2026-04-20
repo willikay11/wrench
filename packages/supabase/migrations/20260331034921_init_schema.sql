@@ -5,7 +5,7 @@ create extension if not exists "vector";
 -- Users (mirrors Supabase auth.users)
 create table public.users (
   id uuid references auth.users(id) on delete cascade primary key,
-  email text unique not null,
+  email text unique,
   display_name text,
   avatar_url text,
   region text,
@@ -18,6 +18,8 @@ create policy "Users can read own profile"
   on public.users for select using (auth.uid() = id);
 create policy "Users can update own profile"
   on public.users for update using (auth.uid() = id);
+create policy "System can insert user profiles"
+  on public.users for insert with check (true);
 
 -- Auto-create user profile on signup
 create or replace function public.handle_new_user()

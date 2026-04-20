@@ -83,6 +83,11 @@ export default function HomePage() {
           if (error) throw error
         }
 
+        // Transition to chatting state on first message
+        if (pageState === "idle") {
+          setPageState("chatting")
+        }
+
         // Call conversation endpoint
         const response = await sendMessage(
           text,
@@ -396,6 +401,7 @@ export default function HomePage() {
                     }}
                     placeholder="Type here..."
                     disabled={isLoading}
+                    autoFocus
                     className="flex-1"
                   />
                   <Button
