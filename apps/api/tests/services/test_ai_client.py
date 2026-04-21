@@ -10,9 +10,42 @@ class TestVisionRouting:
 
     @pytest.mark.asyncio
     @patch("app.services.ai_client.settings")
+    @patch("app.services.ai_client.AsyncOpenAI")
+    async def test_vision_call_routes_to_openrouter(self, mock_openai_class, mock_settings):
+        """Vision call with image routes to OpenRouter when VISION_PROVIDER=openrouter"""
+        mock_settings.ai_provider = "groq"
+        mock_settings.ai_model = "llama-3.3-70b-versatile"
+        mock_settings.vision_provider = "openrouter"
+        mock_settings.vision_model = "qwen/qwen2.5-vl-72b-instruct:free"
+        mock_settings.openrouter_api_key = "test-key"
+        mock_settings.openrouter_api_base = "https://openrouter.ai/api/v1"
+        mock_settings.openrouter_vision_model = "qwen/qwen2.5-vl-72b-instruct:free"
+        mock_settings.groq_api_key = "test-groq-key"
+
+        mock_client = AsyncMock()
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message.content = "Vision result"
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        mock_openai_class.return_value = mock_client
+
+        image_base64 = base64.b64encode(b"test-image").decode()
+        result = await generate("Analyze image", image_base64=image_base64)
+
+        assert result == "Vision result"
+        # Verify OpenRouter was instantiated with correct parameters
+        mock_openai_class.assert_called_once()
+        call_kwargs = mock_openai_class.call_args[1]
+        assert call_kwargs["api_key"] == "test-key"
+        assert call_kwargs["base_url"] == "https://openrouter.ai/api/v1"
+        assert "HTTP-Referer" in call_kwargs["default_headers"]
+
+    @pytest.mark.asyncio
+    @patch("app.services.ai_client.settings")
     @patch("app.services.ai_client.genai")
     async def test_vision_call_routes_to_gemini(self, mock_genai, mock_settings):
-        """Vision call with image routes to Gemini even if AI_PROVIDER=groq"""
+        """Vision call with image routes to Gemini when VISION_PROVIDER=gemini"""
         mock_settings.ai_provider = "groq"
         mock_settings.ai_model = "llama-3.3-70b-versatile"
         mock_settings.vision_provider = "gemini"
@@ -32,6 +65,31 @@ class TestVisionRouting:
         assert result == "Vision result"
         # Verify Gemini was called with vision model
         mock_genai.GenerativeModel.assert_called_once_with("gemini-1.5-flash")
+
+    @pytest.mark.asyncio
+    @patch("app.services.ai_client.settings")
+    @patch("app.services.ai_client.AsyncOpenAI")
+    async def test_text_call_routes_to_openrouter(self, mock_openai_class, mock_settings):
+        """Text call uses OpenRouter when AI_PROVIDER=openrouter"""
+        mock_settings.ai_provider = "openrouter"
+        mock_settings.ai_model = "meta-llama/llama-3.3-70b-instruct:free"
+        mock_settings.openrouter_api_key = "test-key"
+        mock_settings.openrouter_api_base = "https://openrouter.ai/api/v1"
+        mock_settings.openrouter_text_model = "meta-llama/llama-3.3-70b-instruct:free"
+
+        mock_client = AsyncMock()
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message.content = "Text result"
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        mock_openai_class.return_value = mock_client
+
+        result = await generate("Text prompt")
+
+        assert result == "Text result"
+        # Verify OpenRouter was used
+        mock_client.chat.completions.create.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("app.services.ai_client.settings")

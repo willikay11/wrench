@@ -1,7 +1,8 @@
+import asyncio
 import logging
 from typing import Any, cast
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.core.dependencies import CurrentUser, get_current_user
 from app.core.supabase import get_supabase
@@ -69,9 +70,10 @@ async def _vision_analyse_and_populate(
     access_token: str,
 ) -> None:
     """
-    Background task: run Claude Vision on the uploaded image, persist
+    Background task: run vision analysis on the uploaded image, persist
     vision_data to the build, then populate the parts table.
     """
+    logger.info("Starting vision analysis for build %s (image size: %d bytes, mime: %s)", build_id, len(image_bytes), mime_type)
     try:
         supabase = get_supabase(access_token)
 
@@ -95,6 +97,7 @@ async def _vision_analyse_and_populate(
             goals=goals,
             modification_goal=build_data.get("modification_goal"),
         )
+        logger.info("analyse_car_image completed for build %s, extracted parts", build_id)
 
         # Separate parts from vision metadata before storing
         suggested_parts = vision_result.pop("suggested_parts", [])
@@ -106,8 +109,8 @@ async def _vision_analyse_and_populate(
         count = _insert_parts(supabase, build_id, suggested_parts)
         logger.info("Vision analysis complete for build %s — %d parts inserted", build_id, count)
 
-    except Exception:
-        logger.exception("Vision background task failed for build %s", build_id)
+    except Exception as exc:
+        logger.exception("Vision background task failed for build %s: %s", build_id, exc)
 
 
 # ── GET /v1/builds ────────────────────────────────────────────────────────
@@ -346,7 +349,6 @@ async def delete_build(build_id: str, user: CurrentUser = Depends(get_current_us
 @router.post("/{build_id}/image", response_model=BuildImageResponse, status_code=status.HTTP_201_CREATED)
 async def upload_build_image(
     build_id: str,
-    background_tasks: BackgroundTasks,
     image: UploadFile = File(...),
     user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -418,13 +420,15 @@ async def upload_build_image(
         )
 
     # Kick off vision analysis asynchronously — does not block the response
-    background_tasks.add_task(
-        _vision_analyse_and_populate,
-        build_id,
-        image_bytes,
-        image.content_type or "image/jpeg",
-        user["access_token"],
+    asyncio.create_task(
+        _vision_analyse_and_populate(
+            build_id,
+            image_bytes,
+            image.content_type or "image/jpeg",
+            user["access_token"],
+        )
     )
+    logger.info("Vision analysis task queued for build %s", build_id)
 
     return {"image_url": image_url}
 

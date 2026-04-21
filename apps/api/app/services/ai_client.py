@@ -6,6 +6,7 @@ from typing import Optional
 import anthropic
 import google.genai as genai
 from groq import AsyncGroq
+from openai import AsyncOpenAI
 
 from app.core.config import settings
 
@@ -47,36 +48,35 @@ async def generate(
     Raises:
         AIClientError: If the API call fails
     """
-    # Determine which provider to use
-    if force_provider:
-        provider = force_provider.lower()
-        model = settings.ai_model  # Use default model for forced provider
-    elif image_base64:
-        # Vision calls always use VISION_PROVIDER
+    # Determine which provider to use with full priority routing
+    if image_base64:
+        # Vision calls use VISION_PROVIDER
         provider = settings.vision_provider.lower()
-        model = settings.vision_model
+        if provider == "openrouter":
+            return await _call_openrouter(
+                prompt, image_base64, image_mime_type, json_mode, use_vision_model=True
+            )
+        elif provider == "gemini":
+            return await _generate_gemini(prompt, image_base64, image_mime_type, settings.vision_model, json_mode)
+        elif provider == "claude":
+            return await _generate_claude(prompt, image_base64, image_mime_type, settings.vision_model, json_mode)
+        else:
+            raise AIClientError(
+                f"Provider {provider} does not support vision", provider
+            )
     else:
         # Text-only calls use AI_PROVIDER
         provider = settings.ai_provider.lower()
-        model = settings.ai_model
-
-    # Add JSON instruction if requested
-    if json_mode:
-        prompt = f"{prompt}\n\nReturn only valid JSON. No markdown, no explanation."
-
-    if provider == "gemini":
-        return await _generate_gemini(prompt, image_base64, image_mime_type, model)
-    elif provider == "claude":
-        return await _generate_claude(prompt, image_base64, image_mime_type, model)
-    elif provider == "groq":
-        if image_base64:
-            raise AIClientError(
-                "Groq does not support vision. Use VISION_PROVIDER=gemini or VISION_PROVIDER=claude.",
-                "groq"
-            )
-        return await _call_groq(prompt, json_mode, model)
-    else:
-        raise AIClientError(f"Unknown provider: {provider}", provider)
+        if provider == "groq":
+            return await _call_groq(prompt, json_mode, settings.ai_model)
+        elif provider == "openrouter":
+            return await _call_openrouter(prompt, json_mode=json_mode)
+        elif provider == "gemini":
+            return await _generate_gemini(prompt, None, image_mime_type, settings.ai_model, json_mode)
+        elif provider == "claude":
+            return await _generate_claude(prompt, None, image_mime_type, settings.ai_model, json_mode)
+        else:
+            raise AIClientError(f"Unknown provider: {provider}", provider)
 
 
 async def _generate_gemini(
@@ -84,6 +84,7 @@ async def _generate_gemini(
     image_base64: Optional[str],
     image_mime_type: str,
     model: str,
+    json_mode: bool = False,
 ) -> str:
     """Call Gemini API."""
     try:
@@ -91,7 +92,14 @@ async def _generate_gemini(
         client = genai.GenerativeModel(model)
 
         # Build content with text and optional image
-        content: list[str | genai.types.Part] = [prompt]
+        final_prompt = prompt
+        if json_mode:
+            final_prompt += (
+                "\n\nReturn only valid JSON. "
+                "No markdown fences, no explanation."
+            )
+
+        content: list[str | genai.types.Part] = [final_prompt]
         if image_base64:
             image_data = base64.b64decode(image_base64)
             image_part = genai.types.Part.from_data(data=image_data, mime_type=image_mime_type)
@@ -114,6 +122,7 @@ async def _generate_claude(
     image_base64: Optional[str],
     image_mime_type: str,
     model: str,
+    json_mode: bool = False,
 ) -> str:
     """Call Claude API."""
     try:
@@ -134,7 +143,13 @@ async def _generate_claude(
             })
 
         # Add text prompt
-        content.append({"type": "text", "text": prompt})
+        final_prompt = prompt
+        if json_mode:
+            final_prompt += (
+                "\n\nReturn only valid JSON. "
+                "No markdown fences, no explanation."
+            )
+        content.append({"type": "text", "text": final_prompt})
 
         response = await client.messages.create(
             model=model,
@@ -181,3 +196,63 @@ async def _call_groq(
         error_msg = str(exc)
         logger.exception("Groq API call failed: %s", error_msg)
         raise AIClientError(error_msg, "groq") from exc
+
+
+async def _call_openrouter(
+    prompt: str,
+    image_base64: str | None = None,
+    image_mime_type: str = "image/jpeg",
+    json_mode: bool = False,
+    use_vision_model: bool = False,
+) -> str:
+    """Call OpenRouter API (OpenAI-compatible)."""
+    try:
+        client = AsyncOpenAI(
+            api_key=settings.openrouter_api_key,
+            base_url=settings.openrouter_api_base,
+            default_headers={
+                "HTTP-Referer": "https://wrench.app",
+                "X-Title": "Wrench",
+            }
+        )
+
+        model = (
+            settings.openrouter_vision_model
+            if (image_base64 or use_vision_model)
+            else settings.openrouter_text_model
+        )
+
+        final_prompt = prompt
+        if json_mode:
+            final_prompt += (
+                "\n\nReturn only valid JSON. "
+                "No markdown fences, no explanation."
+            )
+
+        content: list = [{"type": "text", "text": final_prompt}]
+
+        if image_base64:
+            content.insert(0, {
+                "type": "image_url",
+                "image_url": {
+                    "url": (
+                        f"data:{image_mime_type};"
+                        f"base64,{image_base64}"
+                    )
+                }
+            })
+
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": content}],
+            temperature=0.7,
+        )
+
+        text = response.choices[0].message.content
+        logger.info("Generated text using OpenRouter model %s", model)
+        return text
+
+    except Exception as exc:
+        error_msg = str(exc)
+        logger.exception("OpenRouter API call failed: %s", error_msg)
+        raise AIClientError(error_msg, "openrouter") from exc

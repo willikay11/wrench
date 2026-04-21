@@ -1,16 +1,24 @@
 import base64
 import json
 import logging
+import re
 from typing import Any, cast
 
-import anthropic
-
 from app.core.config import settings
+from app.services.ai_client import generate
 
 logger = logging.getLogger(__name__)
 
 # Parts categories allowed by the DB check constraint
 VALID_CATEGORIES = ("engine", "drivetrain", "electrical", "cooling", "safety", "other")
+
+
+def _extract_json(text: str) -> str:
+    """Strip markdown code fences from JSON responses."""
+    # Remove markdown code fence wrappers: ```json ... ``` or ``` ... ```
+    text = re.sub(r'^```(?:json)?\s*', '', text)
+    text = re.sub(r'\s*```$', '', text)
+    return text.strip()
 
 
 def _build_parts_prompt(
@@ -49,16 +57,14 @@ async def analyse_car_image(
     modification_goal: str | None = None,
 ) -> dict[str, Any]:
     """
-    Send a car image to Claude Vision.
+    Send a car image to configured vision provider.
 
     Returns a dict with:
       - make, model, year_range, visible_mods, engine_hints, confidence
       - suggested_parts: list of part dicts ready to insert into the parts table
     """
-    client: Any = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     effective_goals: list[str] = goals or []
-
-    image_data = base64.standard_b64encode(image_bytes).decode("utf-8")
+    image_base64 = base64.standard_b64encode(image_bytes).decode("utf-8")
 
     car_id_prompt = """Analyse this car image and return a JSON object with exactly these fields:
 {
@@ -72,36 +78,14 @@ async def analyse_car_image(
 Return only valid JSON, no markdown."""
 
     # ── Step 1: Identify the car ──────────────────────────────────────────────
-    id_response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=512,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": mime_type,
-                            "data": image_data,
-                        },
-                    },
-                    {"type": "text", "text": car_id_prompt},
-                ],
-            }
-        ],
-    )
+    id_text = await generate(car_id_prompt, image_base64=image_base64, image_mime_type=mime_type, json_mode=True)
 
     vision_data: dict[str, Any] = {}
-    for block in getattr(id_response, "content", []):
-        text = getattr(block, "text", None)
-        if isinstance(text, str):
-            try:
-                vision_data = cast(dict[str, Any], json.loads(text))
-            except json.JSONDecodeError:
-                logger.warning("Vision car-ID response was not valid JSON: %s", text[:200])
-            break
+    try:
+        clean_text = _extract_json(id_text)
+        vision_data = cast(dict[str, Any], json.loads(clean_text))
+    except json.JSONDecodeError:
+        logger.warning("Vision car-ID response was not valid JSON: %s", id_text[:200])
 
     # ── Step 2: Generate parts using car context + goals ─────────────────────
     car_label = f"{vision_data.get('make', '')} {vision_data.get('model', '')} {vision_data.get('year_range', '')}".strip()
@@ -110,38 +94,15 @@ Return only valid JSON, no markdown."""
     suggested_parts: list[dict[str, Any]] = []
     if effective_goals:
         parts_prompt = _build_parts_prompt(effective_goals, modification_goal, car_context)
+        parts_text = await generate(parts_prompt, image_base64=image_base64, image_mime_type=mime_type, json_mode=True)
 
-        parts_response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": mime_type,
-                                "data": image_data,
-                            },
-                        },
-                        {"type": "text", "text": parts_prompt},
-                    ],
-                }
-            ],
-        )
-
-        for block in getattr(parts_response, "content", []):
-            text = getattr(block, "text", None)
-            if isinstance(text, str):
-                try:
-                    raw = json.loads(text)
-                    if isinstance(raw, list):
-                        suggested_parts = _sanitise_parts(raw)
-                except json.JSONDecodeError:
-                    logger.warning("Vision parts response was not valid JSON: %s", text[:200])
-                break
+        try:
+            clean_text = _extract_json(parts_text)
+            raw = json.loads(clean_text)
+            if isinstance(raw, list):
+                suggested_parts = _sanitise_parts(raw)
+        except json.JSONDecodeError:
+            logger.warning("Vision parts response was not valid JSON: %s", parts_text[:200])
 
     vision_data["suggested_parts"] = suggested_parts
     return vision_data
@@ -160,27 +121,17 @@ async def generate_parts_for_build(
     if not goals:
         return []
 
-    client: Any = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
     car_context = f"Vehicle: {car}\n" if car else ""
     prompt = _build_parts_prompt(goals, modification_goal, car_context)
+    text = await generate(prompt, json_mode=True)
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=4096,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    for block in getattr(response, "content", []):
-        text = getattr(block, "text", None)
-        if isinstance(text, str):
-            try:
-                raw = json.loads(text)
-                if isinstance(raw, list):
-                    return _sanitise_parts(raw)
-            except json.JSONDecodeError:
-                logger.warning("Text parts response was not valid JSON: %s", text[:200])
-            break
+    try:
+        clean_text = _extract_json(text)
+        raw = json.loads(clean_text)
+        if isinstance(raw, list):
+            return _sanitise_parts(raw)
+    except json.JSONDecodeError:
+        logger.warning("Text parts response was not valid JSON: %s", text[:200])
 
     return []
 

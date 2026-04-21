@@ -1,9 +1,7 @@
 from collections.abc import AsyncIterator
 from typing import Any
 
-import anthropic
-
-from app.core.config import settings
+from app.services.ai_client import generate
 
 
 def build_system_prompt(build_context: dict[str, Any]) -> str:
@@ -29,17 +27,27 @@ async def stream_advisor_response(
     build_context: dict[str, Any],
 ) -> AsyncIterator[str]:
     """
-    Yields SSE-formatted chunks for streaming to the client.
+    Yields SSE-formatted chunks to the client using configured AI provider.
     """
-    client: Any = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    # Build conversation context from messages
+    system_prompt = build_system_prompt(build_context)
+    latest_user_message = None
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            latest_user_message = msg.get("content", "")
+            break
 
-    with client.messages.stream(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        system=build_system_prompt(build_context),
-        messages=messages,
-    ) as stream:
-        for text in stream.text_stream:
-            yield f"data: {text}\n\n"
+    if not latest_user_message:
+        yield "data: [DONE]\n\n"
+        return
+
+    # Prepend system context to the prompt
+    prompt = f"{system_prompt}\n\n{latest_user_message}"
+    response = await generate(prompt)
+
+    # Stream response line-by-line for SSE compatibility
+    for line in response.split("\n"):
+        if line.strip():
+            yield f"data: {line}\n\n"
 
     yield "data: [DONE]\n\n"
