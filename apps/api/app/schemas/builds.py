@@ -5,6 +5,25 @@ from typing import Any, Optional
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
+class VisionExtracted(BaseModel):
+    """Extracted data from vision analysis."""
+    make: Optional[str] = None
+    model: Optional[str] = None
+    year: Optional[str] = None
+    confidence: Optional[int] = None
+    part_name: Optional[str] = None
+    specifications: Optional[dict[str, Any]] = None
+    mods_detected: list[str] = []
+    notes: Optional[str] = None
+
+
+class VisionData(BaseModel):
+    """Vision analysis result for an uploaded image."""
+    image_type: str  # "car" | "rims" | "engine_bay" | "suspension" | "inspiration" | "part" | "unknown"
+    summary: str
+    extracted: VisionExtracted
+
+
 class BuildCreate(BaseModel):
     """Shape of data the client sends when creating a build."""
 
@@ -55,6 +74,7 @@ class BuildResponse(BaseModel):
     updated_at: datetime
     parts_total: int = 0
     parts_sourced: int = 0
+    vision_data: Optional[VisionData] = None
 
 
 class PartVendorResponse(BaseModel):
@@ -138,7 +158,7 @@ class BuildDetailResponse(BaseModel):
     parts: list[PartResponse] = []
     parts_total: int = 0
     parts_sourced: int = 0
-    vision_data: Optional[dict[str, Any]] = None
+    vision_data: Optional[VisionData] = None
 
 
 class BuildImageResponse(BaseModel):

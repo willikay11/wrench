@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # Vision AI (image analysis — must support vision)
     vision_provider: str = "openrouter"  # "openrouter" | "gemini" | "claude"
     vision_model: str = "qwen/qwen2.5-vl-72b-instruct:free"
+    vision_fallback_provider: str = "gemini"  # Fallback if primary fails
 
     # OpenRouter (supports both text and vision)
     openrouter_api_key: str = ""

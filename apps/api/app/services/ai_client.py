@@ -242,15 +242,20 @@ async def _call_openrouter(
                 }
             })
 
+        logger.info(f"OpenRouter request: model={model}, "
+                    f"has_image={image_base64 is not None}, "
+                    f"content_length={len(str(content))}")
+
         response = await client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": content}],
             temperature=0.7,
         )
 
-        text = response.choices[0].message.content
+        result = response.choices[0].message.content
+        logger.info(f"OpenRouter response: {repr(result[:200] if result else 'EMPTY')}")
         logger.info("Generated text using OpenRouter model %s", model)
-        return text
+        return result
 
     except Exception as exc:
         error_msg = str(exc)

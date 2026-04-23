@@ -44,6 +44,9 @@ const mockPart: Part = {
   is_safety_critical: false,
   notes: null,
   goal: "K24 engine swap",
+  vendors: [],
+  ordered_from_vendor_id: null,
+  ordered_at: null,
   created_at: "2026-01-01T00:00:00+00:00",
   updated_at: "2026-01-01T00:00:00+00:00",
 }
@@ -56,6 +59,40 @@ const safetyPart: Part = {
   goal: "Roll cage",
   price_estimate: 3000,
   status: "sourced",
+}
+
+const partWithVendors: Part = {
+  ...mockPart,
+  vendors: [
+    {
+      id: "vendor-1",
+      part_id: "part-001",
+      vendor_name: "Vendor 1",
+      vendor_url: "https://vendor1.com",
+      price: 1200,
+      currency: "USD",
+      ships_from: "USA",
+      estimated_days_min: 5,
+      estimated_days_max: 7,
+      shipping_cost: 15,
+      is_primary: true,
+      created_at: "2026-01-01T00:00:00+00:00",
+    },
+    {
+      id: "vendor-2",
+      part_id: "part-001",
+      vendor_name: "Vendor 2",
+      vendor_url: "https://vendor2.com",
+      price: 950,
+      currency: "USD",
+      ships_from: "USA",
+      estimated_days_min: 3,
+      estimated_days_max: 5,
+      shipping_cost: 10,
+      is_primary: false,
+      created_at: "2026-01-01T00:00:00+00:00",
+    },
+  ],
 }
 
 const baseBuild: BuildDetail = {
@@ -137,6 +174,150 @@ describe("BuildWorkspace", () => {
     it("renders similar builds placeholder links", () => {
       render(<BuildWorkspace build={baseBuild} />)
       expect(screen.getByText(/2JZ E30 street build/i)).toBeInTheDocument()
+    })
+
+    it("vision pill shown when vision_data present", () => {
+      const build = {
+        ...baseBuild,
+        vision_data: {
+          image_type: "car",
+          summary: "1991 BMW E30 325i",
+          extracted: {
+            make: "BMW",
+            model: "E30",
+            year: "1991",
+            confidence: 95,
+            part_name: null,
+            specifications: null,
+            mods_detected: [],
+            notes: null,
+          },
+        },
+      }
+      render(<BuildWorkspace build={build} />)
+      expect(screen.getByText(/AI identified/i)).toBeInTheDocument()
+    })
+
+    it("vision pill hidden when no vision_data", () => {
+      render(<BuildWorkspace build={baseBuild} />)
+      expect(screen.queryByText(/AI identified/i)).not.toBeInTheDocument()
+    })
+
+    it("vision pill expands on click", async () => {
+      const build = {
+        ...baseBuild,
+        vision_data: {
+          image_type: "car" as const,
+          summary: "1991 BMW E30 325i",
+          extracted: {
+            make: "BMW",
+            model: "E30",
+            year: "1991",
+            confidence: 95,
+            part_name: null,
+            specifications: null,
+            mods_detected: [],
+            notes: null,
+          },
+        },
+      }
+      render(<BuildWorkspace build={build} />)
+      const pill = screen.getByText(/AI identified/i)
+      fireEvent.click(pill)
+      await waitFor(() => {
+        expect(screen.getByText("Make")).toBeInTheDocument()
+        expect(screen.getByText("BMW")).toBeInTheDocument()
+      })
+    })
+
+    it("vision pill expands without overlapping other sections", async () => {
+      const build = {
+        ...baseBuild,
+        vision_data: {
+          image_type: "car" as const,
+          summary: "1991 BMW E30 325i",
+          extracted: {
+            make: "BMW",
+            model: "E30",
+            year: "1991",
+            confidence: 95,
+            part_name: null,
+            specifications: null,
+            mods_detected: [],
+            notes: null,
+          },
+        },
+      }
+      render(<BuildWorkspace build={build} />)
+      const pill = screen.getByText(/AI identified/i)
+      const pillButton = pill.closest("button")
+      expect(pillButton).toHaveStyle({ borderRadius: "99px" })
+      fireEvent.click(pill)
+      await waitFor(() => {
+        expect(pillButton).toHaveStyle({ borderRadius: "8px 8px 0 0" })
+      })
+    })
+
+    it("vision pill collapses back to pill shape", async () => {
+      const build = {
+        ...baseBuild,
+        vision_data: {
+          image_type: "car" as const,
+          summary: "1991 BMW E30 325i",
+          extracted: {
+            make: "BMW",
+            model: "E30",
+            year: "1991",
+            confidence: 95,
+            part_name: null,
+            specifications: null,
+            mods_detected: [],
+            notes: null,
+          },
+        },
+      }
+      render(<BuildWorkspace build={build} />)
+      const pill = screen.getByText(/AI identified/i)
+      const pillButton = pill.closest("button")
+      fireEvent.click(pill)
+      await waitFor(() => {
+        expect(screen.getByText("Make")).toBeInTheDocument()
+      })
+      fireEvent.click(pillButton!)
+      await waitFor(() => {
+        expect(screen.queryByText("Make")).not.toBeInTheDocument()
+        expect(pillButton).toHaveStyle({ borderRadius: "99px" })
+      })
+    })
+
+    it("expanded state renders make/model/year rows", async () => {
+      const build = {
+        ...baseBuild,
+        vision_data: {
+          image_type: "car" as const,
+          summary: "1991 BMW E30 325i",
+          extracted: {
+            make: "BMW",
+            model: "E30",
+            year: "1991",
+            confidence: 95,
+            part_name: null,
+            specifications: null,
+            mods_detected: [],
+            notes: null,
+          },
+        },
+      }
+      render(<BuildWorkspace build={build} />)
+      fireEvent.click(screen.getByText(/AI identified/i))
+      await waitFor(() => {
+        expect(screen.getByText("Make")).toBeInTheDocument()
+        expect(screen.getByText("Model")).toBeInTheDocument()
+        expect(screen.getByText("Year")).toBeInTheDocument()
+        expect(screen.getByText("BMW")).toBeInTheDocument()
+        expect(screen.getByText("E30")).toBeInTheDocument()
+        expect(screen.getByText("1991")).toBeInTheDocument()
+      })
     })
   })
 
@@ -231,6 +412,85 @@ describe("BuildWorkspace", () => {
     it("renders sourced count in cost bar", () => {
       render(<BuildWorkspace build={stateCBuild} />)
       expect(screen.getByText("1 sourced")).toBeInTheDocument()
+    })
+
+    it("description is truncated with ellipsis", () => {
+      const partWithDesc = {
+        ...mockPart,
+        description: "This is a very long description that should be truncated",
+      }
+      const build = {
+        ...stateCBuild,
+        parts: [partWithDesc],
+      }
+      render(<BuildWorkspace build={build} />)
+      const desc = screen.getByText(partWithDesc.description)
+      expect(desc).toHaveStyle({
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        display: "block",
+      })
+    })
+
+    it("description container has whiteSpace nowrap style", () => {
+      const partWithDesc = {
+        ...mockPart,
+        description: "This is a long description that wraps normally but should not wrap here",
+      }
+      const build = {
+        ...stateCBuild,
+        parts: [partWithDesc],
+      }
+      const { container } = render(<BuildWorkspace build={build} />)
+      const desc = screen.getByText(partWithDesc.description)
+      expect(desc).toHaveStyle({ whiteSpace: "nowrap" })
+    })
+
+    it("description container parent has minWidth 0", () => {
+      const partWithDesc = {
+        ...mockPart,
+        description: "A moderately long description that tests the container",
+      }
+      const build = {
+        ...stateCBuild,
+        parts: [partWithDesc],
+      }
+      const { container } = render(<BuildWorkspace build={build} />)
+      const descContainer = screen.getByText(partWithDesc.description).closest("div.min-w-0")
+      expect(descContainer).toHaveClass("min-w-0")
+      expect(descContainer).toHaveStyle({ overflow: "hidden" })
+    })
+
+    it("vendors hint shows lowest price when vendors exist", () => {
+      const build = {
+        ...stateCBuild,
+        parts: [partWithVendors],
+      }
+      render(<BuildWorkspace build={build} />)
+      expect(screen.getByText(/\[2\] vendors from \$950/)).toBeInTheDocument()
+    })
+
+    it("vendors hint hidden when no vendors", () => {
+      const partNoVendors = { ...mockPart, vendors: [] }
+      const build = { ...stateCBuild, parts: [partNoVendors] }
+      render(<BuildWorkspace build={build} />)
+      expect(screen.queryByText(/vendors from/)).not.toBeInTheDocument()
+    })
+
+    it("safety icon shown when is_safety_critical", () => {
+      const build = { ...stateCBuild, parts: [safetyPart] }
+      const { container } = render(<BuildWorkspace build={build} />)
+      const safetyIcon = container.querySelector('div[title="Safety critical"]')
+      expect(safetyIcon).toBeInTheDocument()
+      expect(safetyIcon?.textContent).toBe("!")
+    })
+
+    it("safety icon hidden when not safety critical", () => {
+      const build = { ...stateCBuild, parts: [mockPart] }
+      const { container } = render(<BuildWorkspace build={build} />)
+      const safetyIcon = container.querySelector('div[title="Safety critical"]')
+      expect(safetyIcon).not.toBeInTheDocument()
     })
 
     it("shows tabs toolbar", () => {

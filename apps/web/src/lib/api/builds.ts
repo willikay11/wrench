@@ -48,18 +48,26 @@ export interface Part {
   updated_at: string
 }
 
+export interface VisionExtracted {
+  make: string | null
+  model: string | null
+  year: string | null
+  confidence: number | null
+  part_name: string | null
+  specifications: Record<string, string> | null
+  mods_detected: string[]
+  notes: string | null
+}
+
 export interface VisionData {
-  make?: string
-  model?: string
-  year_range?: string
-  visible_mods?: string[]
-  engine_hints?: string[]
-  confidence?: { make: number; model: number; year: number }
+  image_type: 'car' | 'rims' | 'engine_bay' | 'suspension' | 'inspiration' | 'part' | 'unknown'
+  summary: string
+  extracted: VisionExtracted
 }
 
 export interface BuildDetail extends Omit<Build, "vision_data"> {
   parts: Part[]
-  vision_data?: VisionData | null
+  vision_data: VisionData | null
 }
 
 export interface GenerateResponse {

@@ -18,7 +18,7 @@ from app.schemas.builds import (
     OrderPartRequest,
     PartResponse,
 )
-from app.services.vision_service import analyse_car_image
+from app.services.vision_analyzer import analyze_build_image
 from app.services.parts_generator import generate_parts_for_build
 from app.services.ai_client import AIClientError
 
@@ -107,16 +107,17 @@ async def _vision_analyse_and_populate(
     access_token: str,
 ) -> None:
     """
-    Background task: run vision analysis on the uploaded image, persist
-    vision_data to the build, then populate the parts table.
+    Background task: run vision analysis on the uploaded image and persist
+    vision_data to the build.
     """
     logger.info("Starting vision analysis for build %s (image size: %d bytes, mime: %s)", build_id, len(image_bytes), mime_type)
     try:
+        import base64
         supabase = get_supabase(access_token)
 
         build_row = (
             supabase.table("builds")
-            .select("goals, modification_goal, donor_car")
+            .select("modification_goal, donor_car")
             .eq("id", build_id)
             .single()
             .execute()
@@ -126,25 +127,21 @@ async def _vision_analyse_and_populate(
             return
 
         build_data = cast(dict[str, Any], build_row.data)
-        goals: list[str] = build_data.get("goals") or []
 
-        vision_result = await analyse_car_image(
-            image_bytes,
-            mime_type=mime_type,
-            goals=goals,
-            modification_goal=build_data.get("modification_goal"),
+        # Convert image bytes to base64
+        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        vision_result = await analyze_build_image(
+            image_base64=image_base64,
+            modification_goal=build_data.get("modification_goal") or "general build",
+            car=build_data.get("donor_car") or "unknown",
+            image_mime_type=mime_type,
         )
-        logger.info("analyse_car_image completed for build %s, extracted parts", build_id)
-
-        # Separate parts from vision metadata before storing
-        suggested_parts = vision_result.pop("suggested_parts", [])
+        logger.info("analyze_build_image completed for build %s", build_id)
 
         # Store vision metadata on the build
         supabase.table("builds").update({"vision_data": vision_result}).eq("id", build_id).execute()
-
-        # Populate parts table
-        count = _insert_parts(supabase, build_id, suggested_parts)
-        logger.info("Vision analysis complete for build %s — %d parts inserted", build_id, count)
+        logger.info("Vision analysis complete for build %s", build_id)
 
     except Exception as exc:
         logger.exception("Vision background task failed for build %s: %s", build_id, exc)

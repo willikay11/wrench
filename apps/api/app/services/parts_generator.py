@@ -21,6 +21,7 @@ Build details:
 - Use case: {use_case}
 - Goals: {goals}
 - Specific requirements: {specific_requirements}
+- Vision analysis: {vision_analysis}
 
 Generate a comprehensive parts list. For each part:
 - Be specific with part names (include brand if relevant)
@@ -168,12 +169,26 @@ async def generate_parts_for_build(
     goals = ", ".join(build.get("goals", [modification_goal]))
     specific_reqs = specific_requirements or "None specified — recommend best options"
 
+    # Extract vision analysis from build
+    vision_data = build.get("vision_data")
+    if vision_data and isinstance(vision_data, dict):
+        vision_analysis = (
+            f"Image type: {vision_data.get('image_type')}\n"
+            f"Summary: {vision_data.get('summary')}\n"
+            f"Extracted notes: {vision_data.get('extracted', {}).get('notes', 'None')}\n"
+            f"Specifications: {vision_data.get('extracted', {}).get('specifications', 'None')}\n"
+            f"Mods detected: {', '.join(vision_data.get('extracted', {}).get('mods_detected', []))}"
+        )
+    else:
+        vision_analysis = "No image provided"
+
     prompt = PARTS_GENERATION_PROMPT.format(
         car=car,
         modification_goal=modification_goal,
         use_case=use_case,
         goals=goals,
         specific_requirements=specific_reqs,
+        vision_analysis=vision_analysis,
     )
 
     raw = await generate(prompt, image_base64=image_base64, json_mode=True)
