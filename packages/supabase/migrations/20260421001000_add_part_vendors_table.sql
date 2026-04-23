@@ -1,3 +1,4 @@
+-- Create part_vendors table for storing multiple vendor options per part
 create table if not exists public.part_vendors (
   id uuid primary key default gen_random_uuid(),
   part_id uuid not null

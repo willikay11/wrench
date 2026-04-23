@@ -2,7 +2,7 @@ import json
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.services.parts_generator import generate_parts_for_build
+from app.services.parts_generator import generate_parts_for_build, enrich_parts_with_images
 from app.services.ai_client import AIClientError
 
 
@@ -11,9 +11,10 @@ class TestGeneratePartsForBuild:
 
     @pytest.mark.asyncio
     @patch("app.services.parts_generator.generate")
-    async def test_generate_parts_returns_parsed_dict_on_success(self, mock_generate):
+    @patch("app.services.parts_generator.enrich_parts_with_images")
+    async def test_generate_parts_returns_parsed_dict_on_success(self, mock_enrich, mock_generate):
         """generate_parts_for_build returns parsed dict on success"""
-        mock_response = {
+        ai_response = {
             "parts": [
                 {
                     "name": "K24A2 engine",
@@ -35,7 +36,14 @@ class TestGeneratePartsForBuild:
                 "message": "K24 swap parts list",
             },
         }
-        mock_generate.return_value = json.dumps(mock_response)
+
+        # Enrich adds image_url field
+        enriched_parts = [
+            {**ai_response["parts"][0], "image_url": None}
+        ]
+
+        mock_generate.return_value = json.dumps(ai_response)
+        mock_enrich.return_value = enriched_parts
 
         build = {
             "car": "Honda E30",
@@ -45,8 +53,11 @@ class TestGeneratePartsForBuild:
 
         result = await generate_parts_for_build(build)
 
-        assert result == mock_response
+        # Result should have enriched parts
+        assert result["parts"] == enriched_parts
+        assert result["summary"] == ai_response["summary"]
         mock_generate.assert_called_once()
+        mock_enrich.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("app.services.parts_generator.generate")
@@ -179,3 +190,90 @@ class TestGeneratePartsForBuild:
 
         call_args = mock_generate.call_args
         assert call_args[1].get("image_base64") == image_base64
+
+
+class TestEnrichPartsWithImages:
+    """Test image enrichment for parts"""
+
+    @pytest.mark.asyncio
+    @patch("app.services.parts_generator.fetch_product_image")
+    async def test_enrich_parts_fetches_image_for_vendor_url(self, mock_fetch):
+        """enrich_parts_with_images fetches image for parts with vendor_url"""
+        mock_fetch.return_value = "https://example.com/product-image.jpg"
+
+        parts = [
+            {
+                "name": "Engine",
+                "vendor_url": "https://rockauto.com/products/engine",
+            }
+        ]
+
+        result = await enrich_parts_with_images(parts)
+
+        assert result[0]["image_url"] == "https://example.com/product-image.jpg"
+        mock_fetch.assert_called_once_with("https://rockauto.com/products/engine")
+
+    @pytest.mark.asyncio
+    @patch("app.services.parts_generator.fetch_product_image")
+    async def test_enrich_parts_sets_none_without_vendor_url(self, mock_fetch):
+        """enrich_parts_with_images sets None for parts without vendor_url"""
+        parts = [
+            {
+                "name": "Custom part",
+                "vendor_url": None,
+            }
+        ]
+
+        result = await enrich_parts_with_images(parts)
+
+        assert result[0]["image_url"] is None
+        mock_fetch.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("app.services.parts_generator.fetch_product_image")
+    async def test_enrich_parts_runs_concurrently(self, mock_fetch):
+        """enrich_parts_with_images runs fetches concurrently"""
+        mock_fetch.return_value = "https://example.com/image.jpg"
+
+        parts = [
+            {"name": "Part 1", "vendor_url": "https://example.com/1"},
+            {"name": "Part 2", "vendor_url": "https://example.com/2"},
+            {"name": "Part 3", "vendor_url": "https://example.com/3"},
+        ]
+
+        result = await enrich_parts_with_images(parts)
+
+        # All parts should have image_url set
+        assert all("image_url" in p for p in result)
+        # fetch_product_image should be called 3 times (concurrently)
+        assert mock_fetch.call_count == 3
+
+    @pytest.mark.asyncio
+    @patch("app.services.parts_generator.generate")
+    @patch("app.services.parts_generator.enrich_parts_with_images")
+    async def test_generate_parts_includes_image_url(self, mock_enrich, mock_generate):
+        """generate_parts_for_build includes image_url in returned parts"""
+        parts_with_images = [
+            {
+                "name": "K24A2 engine",
+                "vendor_url": "https://rockauto.com/engine",
+                "image_url": "https://example.com/image.jpg",
+            }
+        ]
+        mock_response = {
+            "parts": [{"name": "K24A2 engine", "vendor_url": "https://rockauto.com/engine"}],
+            "summary": {"estimated_total": 1200.00},
+        }
+        mock_generate.return_value = json.dumps(mock_response)
+        mock_enrich.return_value = parts_with_images
+
+        build = {
+            "car": "Honda E30",
+            "modification_goal": "K24 swap",
+            "goals": ["K24 swap"],
+        }
+
+        result = await generate_parts_for_build(build)
+
+        assert result["parts"][0]["image_url"] == "https://example.com/image.jpg"
+        mock_enrich.assert_called_once()

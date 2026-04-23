@@ -57,6 +57,41 @@ class BuildResponse(BaseModel):
     parts_sourced: int = 0
 
 
+class PartVendorResponse(BaseModel):
+    """Shape of a vendor option for a part."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    part_id: str
+    vendor_name: str
+    vendor_url: Optional[str] = None
+    price: Optional[float] = None
+    currency: str = "USD"
+    ships_from: Optional[str] = None
+    estimated_days_min: Optional[int] = None
+    estimated_days_max: Optional[int] = None
+    shipping_cost: Optional[float] = None
+    is_primary: bool = False
+    created_at: datetime
+
+
+class PartVendorCreate(BaseModel):
+    """Schema for creating a vendor option for a part."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    vendor_name: str
+    vendor_url: Optional[str] = None
+    price: Optional[float] = None
+    currency: str = "USD"
+    ships_from: Optional[str] = None
+    estimated_days_min: Optional[int] = None
+    estimated_days_max: Optional[int] = None
+    shipping_cost: Optional[float] = None
+    is_primary: bool = False
+
+
 class PartResponse(BaseModel):
     """Shape of a single part returned inside BuildDetailResponse."""
 
@@ -70,9 +105,13 @@ class PartResponse(BaseModel):
     status: str
     price_estimate: Optional[float] = None
     vendor_url: Optional[str] = None
+    image_url: Optional[str] = None
     is_safety_critical: bool = False
     notes: Optional[str] = None
     goal: Optional[str] = None
+    vendors: list[PartVendorResponse] = []
+    ordered_from_vendor_id: Optional[str] = None
+    ordered_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
@@ -126,3 +165,8 @@ class GeneratePartsResponse(BaseModel):
     estimated_total: float
     safety_critical_count: int
     message: str
+
+
+class OrderPartRequest(BaseModel):
+    """Request to order a part from a specific vendor."""
+    vendor_id: str

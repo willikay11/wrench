@@ -13,6 +13,21 @@ export type Build = Omit<BuildRow, "donor_car" | "engine_swap"> & {
   parts_sourced?: number
 }
 
+export interface PartVendor {
+  id: string
+  part_id: string
+  vendor_name: string
+  vendor_url: string | null
+  price: number | null
+  currency: string
+  ships_from: string | null
+  estimated_days_min: number | null
+  estimated_days_max: number | null
+  shipping_cost: number | null
+  is_primary: boolean
+  created_at: string
+}
+
 export interface Part {
   id: string
   build_id: string
@@ -22,9 +37,13 @@ export interface Part {
   status: "needed" | "ordered" | "sourced" | "installed"
   price_estimate: number | null
   vendor_url: string | null
+  image_url: string | null
   is_safety_critical: boolean
   notes: string | null
   goal: string | null
+  vendors: PartVendor[]
+  ordered_from_vendor_id: string | null
+  ordered_at: string | null
   created_at: string
   updated_at: string
 }
@@ -171,6 +190,29 @@ export async function uploadBuildImage(
       Authorization: `Bearer ${accessToken}`,
     },
     body: form,
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Unknown error" }))
+    throw new Error(error.detail ?? `API error ${res.status}`)
+  }
+
+  return res.json()
+}
+
+export async function orderPart(
+  buildId: string,
+  partId: string,
+  vendorId: string,
+  accessToken: string
+): Promise<Part> {
+  const res = await fetch(`${CLIENT_API_URL}/v1/builds/${buildId}/parts/${partId}/order`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ vendor_id: vendorId }),
   })
 
   if (!res.ok) {

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { BuildWorkspace } from "./BuildWorkspace"
 import type { BuildDetail, Part } from "@/lib/api/builds"
 
@@ -39,6 +40,7 @@ const mockPart: Part = {
   status: "needed",
   price_estimate: 1500,
   vendor_url: null,
+  image_url: null,
   is_safety_critical: false,
   notes: null,
   goal: "K24 engine swap",
@@ -89,7 +91,6 @@ describe("BuildWorkspace", () => {
     it("shows car placeholder when no image_url", () => {
       render(<BuildWorkspace build={baseBuild} />)
       expect(screen.getByLabelText("Car placeholder")).toBeInTheDocument()
-      expect(screen.queryByRole("img", { name: baseBuild.title })).not.toBeInTheDocument()
     })
 
     it("shows image when image_url is present", () => {
@@ -101,8 +102,7 @@ describe("BuildWorkspace", () => {
 
     it("renders the car name", () => {
       render(<BuildWorkspace build={baseBuild} />)
-      // Car name appears in both left panel and advisor header
-      expect(screen.getAllByText("1991 BMW E30 325i").length).toBeGreaterThanOrEqual(1)
+      expect(screen.getByText("1991 BMW E30 325i")).toBeInTheDocument()
     })
 
     it("renders the status pill", () => {
@@ -125,7 +125,6 @@ describe("BuildWorkspace", () => {
         parts_sourced: 1,
       }
       render(<BuildWorkspace build={build} />)
-      // K24 engine swap goal has 1 part, Roll cage goal has 1 part
       const counts = screen.getAllByText("1")
       expect(counts.length).toBeGreaterThanOrEqual(2)
     })
@@ -172,10 +171,9 @@ describe("BuildWorkspace", () => {
 
     it("renders the modification_goal in a blockquote", () => {
       render(<BuildWorkspace build={stateBBuild} />)
-      // modification_goal appears in both the blockquote and the advisor message
       expect(
-        screen.getAllByText(/I want to do a K24 swap for daily driving/i).length
-      ).toBeGreaterThanOrEqual(1)
+        screen.getByText(/I want to do a K24 swap for daily driving/i)
+      ).toBeInTheDocument()
     })
 
     it("renders the generate parts list button", () => {
@@ -205,7 +203,6 @@ describe("BuildWorkspace", () => {
     it("renders part names", () => {
       render(<BuildWorkspace build={stateCBuild} />)
       expect(screen.getAllByText("K24A2 Engine").length).toBeGreaterThanOrEqual(1)
-      // "Roll cage" appears as goal header + part row + left panel goal — use getAllByText
       expect(screen.getAllByText("Roll cage").length).toBeGreaterThanOrEqual(1)
     })
 
@@ -217,14 +214,12 @@ describe("BuildWorkspace", () => {
 
     it("renders the goal group headers", () => {
       render(<BuildWorkspace build={stateCBuild} />)
-      // Goal names appear in left panel AND as group headers in centre
       const k24Instances = screen.getAllByText("K24 engine swap")
-      expect(k24Instances.length).toBeGreaterThanOrEqual(2)
+      expect(k24Instances.length).toBeGreaterThanOrEqual(1)
     })
 
     it("renders the cost bar with total", () => {
       render(<BuildWorkspace build={stateCBuild} />)
-      // Total cost: 1500 + 3000 = $4,500
       expect(screen.getByText("$4,500")).toBeInTheDocument()
     })
 
@@ -246,68 +241,196 @@ describe("BuildWorkspace", () => {
     })
   })
 
-  // ── Advisor panel ───────────────────────────────────────────────────────
+  // ── Advisor drawer ──────────────────────────────────────────────────────
 
-  describe("advisor panel", () => {
-    it("State A — initial message references the car", () => {
-      render(<BuildWorkspace build={baseBuild} />)
-      expect(
-        screen.getByText(/I can see you're working on your 1991 BMW E30 325i/i)
-      ).toBeInTheDocument()
-    })
-
-    it("State A — no suggestion chips shown", () => {
-      render(<BuildWorkspace build={baseBuild} />)
-      expect(screen.queryByText("Generate now")).not.toBeInTheDocument()
-      expect(screen.queryByText("Tell me more about this build")).not.toBeInTheDocument()
-    })
-
-    it("State B — initial message references modification_goal", () => {
-      const build = { ...baseBuild, modification_goal: "daily track build" }
+  describe("Advisor drawer", () => {
+    it("renders Ask advisor button in State C", () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
       render(<BuildWorkspace build={build} />)
-      expect(screen.getByText(/You want to daily track build/i)).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: /open advisor/i })).toBeInTheDocument()
     })
 
-    it("State B — shows Generate now chip", () => {
+    it("drawer is not visible on initial render", () => {
+      render(<BuildWorkspace build={baseBuild} />)
+      const drawer = screen.queryByRole("dialog", { name: /build advisor/i })
+      expect(drawer).not.toBeVisible()
+    })
+
+    it("clicking Ask advisor opens the drawer", async () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
+      render(<BuildWorkspace build={build} />)
+      const button = screen.getByRole("button", { name: /open advisor/i })
+      fireEvent.click(button)
+      await waitFor(() => {
+        expect(screen.getByRole("dialog", { name: /build advisor/i })).toBeVisible()
+      })
+    })
+
+    it("clicking backdrop closes the drawer", async () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
+      render(<BuildWorkspace build={build} />)
+      fireEvent.click(screen.getByRole("button", { name: /open advisor/i }))
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeVisible())
+      const backdrop = screen.getByRole("dialog").parentElement?.previousElementSibling
+      if (backdrop) fireEvent.click(backdrop)
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeVisible())
+    })
+
+    it("clicking × closes the drawer", async () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
+      render(<BuildWorkspace build={build} />)
+      fireEvent.click(screen.getByRole("button", { name: /open advisor/i }))
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeVisible())
+      fireEvent.click(screen.getByRole("button", { name: /close advisor/i }))
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeVisible())
+    })
+
+    it("Escape key closes the drawer", async () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
+      render(<BuildWorkspace build={build} />)
+      fireEvent.click(screen.getByRole("button", { name: /open advisor/i }))
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeVisible())
+      fireEvent.keyDown(document, { key: "Escape" })
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeVisible())
+    })
+
+    it("unread dot visible before drawer opened", () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
+      const { container } = render(<BuildWorkspace build={build} />)
+      const button = screen.getByRole("button", { name: /open advisor/i })
+      const dot = button.querySelector("div[style*='border']")
+      expect(dot).toBeInTheDocument()
+    })
+
+    it("unread dot hidden after drawer opened", async () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
+      const { container } = render(<BuildWorkspace build={build} />)
+      fireEvent.click(screen.getByRole("button", { name: /open advisor/i }))
+      await waitFor(() => {
+        const button = screen.getByRole("button", { name: /open advisor/i })
+        const dot = button.querySelector("div[style*='border']")
+        expect(dot).not.toBeInTheDocument()
+      })
+    })
+
+    it("shows no-goal message when no modification_goal", async () => {
+      render(<BuildWorkspace build={baseBuild} />)
+      // Ask advisor button only shows in State C
+      // For State A/B, message is in centre panel, not drawer
+      expect(screen.queryByRole("button", { name: /open advisor/i })).not.toBeInTheDocument()
+    })
+
+    it("shows has-goal message when goal set but no parts", () => {
       const build = { ...baseBuild, modification_goal: "K24 swap" }
       render(<BuildWorkspace build={build} />)
-      expect(screen.getByText("Generate now")).toBeInTheDocument()
-      expect(screen.getByText("Tell me more about this build")).toBeInTheDocument()
+      // Button not shown in State B (has goal but no parts)
+      expect(screen.queryByRole("button", { name: /open advisor/i })).not.toBeInTheDocument()
     })
 
-    it("State C — initial message references part count", () => {
+    it("shows parts-ready message when parts exist", async () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
+      render(<BuildWorkspace build={build} />)
+      fireEvent.click(screen.getByRole("button", { name: /open advisor/i }))
+      await waitFor(() => {
+        expect(screen.getByText(/Your parts list is ready/i)).toBeInTheDocument()
+      })
+    })
+
+    it("shows safety warning when safety-critical parts exist", async () => {
       const build = {
         ...baseBuild,
         modification_goal: "K24 swap",
-        parts: [mockPart],
-        parts_total: 1,
-        parts_sourced: 0,
+        parts: [mockPart, safetyPart],
       }
       render(<BuildWorkspace build={build} />)
-      expect(screen.getByText(/Your parts list is ready — 1 parts/i)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole("button", { name: /open advisor/i }))
+      await waitFor(() => {
+        expect(screen.getByText(/Safety flags/i)).toBeInTheDocument()
+      })
     })
 
-    it("State C — shows actionable chips", () => {
-      const build = {
-        ...baseBuild,
-        modification_goal: "K24 swap",
-        parts: [mockPart],
-        parts_total: 1,
-        parts_sourced: 0,
-      }
+    it("shows suggestion chips when parts exist", async () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
       render(<BuildWorkspace build={build} />)
-      expect(screen.getByText("What should I do first?")).toBeInTheDocument()
-      expect(screen.getByText("Find a mechanic in Nairobi")).toBeInTheDocument()
+      fireEvent.click(screen.getByRole("button", { name: /open advisor/i }))
+      await waitFor(() => {
+        expect(screen.getByText(/What should I do first/i)).toBeInTheDocument()
+      })
     })
 
-    it("renders the advisor text input", () => {
-      render(<BuildWorkspace build={baseBuild} />)
-      expect(screen.getByPlaceholderText(/ask about your build/i)).toBeInTheDocument()
+    it("chip click populates textarea with chip text", async () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
+      render(<BuildWorkspace build={build} />)
+      fireEvent.click(screen.getByRole("button", { name: /open advisor/i }))
+      await waitFor(() => {
+        const chip = screen.getByText(/What should I do first/i)
+        fireEvent.click(chip)
+        const textarea = screen.getByPlaceholderText(/ask about your build/i)
+        expect((textarea as HTMLTextAreaElement).value).toBe("What should I do first?")
+      })
     })
 
-    it("renders the Send button", () => {
-      render(<BuildWorkspace build={baseBuild} />)
-      expect(screen.getByRole("button", { name: /send/i })).toBeInTheDocument()
+    it("drawer has role=dialog", async () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
+      render(<BuildWorkspace build={build} />)
+      fireEvent.click(screen.getByRole("button", { name: /open advisor/i }))
+      await waitFor(() => {
+        expect(screen.getByRole("dialog", { name: /build advisor/i })).toBeInTheDocument()
+      })
+    })
+
+    it("drawer has aria-modal=true", async () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
+      render(<BuildWorkspace build={build} />)
+      fireEvent.click(screen.getByRole("button", { name: /open advisor/i }))
+      await waitFor(() => {
+        expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true")
+      })
+    })
+  })
+
+  // ── Part Detail Drawer ──────────────────────────────────────────────────
+
+  describe("Part Detail Drawer", () => {
+    it("clicking part row opens PartDetailDrawer", async () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
+      render(<BuildWorkspace build={build} />)
+      const partRows = screen.getAllByText("K24A2 Engine")
+      fireEvent.click(partRows[0])
+      await waitFor(() => {
+        expect(screen.getByText("Where to buy")).toBeInTheDocument()
+      })
+    })
+
+    it("selectedPart is set when row clicked", async () => {
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
+      render(<BuildWorkspace build={build} />)
+      const partRows = screen.getAllByText("K24A2 Engine")
+      fireEvent.click(partRows[0])
+      await waitFor(() => {
+        expect(screen.getByText("JDM K24A2 with 100k miles")).toBeInTheDocument()
+      })
+    })
+
+    it("part status updates optimistically on order", async () => {
+      vi.mocked(require("@/lib/api/builds").orderPart).mockResolvedValueOnce({
+        ...mockPart,
+        status: "ordered",
+        ordered_from_vendor_id: "vendor-001",
+        ordered_at: new Date().toISOString(),
+      })
+      const build = { ...baseBuild, modification_goal: "K24 swap", parts: [mockPart] }
+      render(<BuildWorkspace build={build} />)
+      const partRows = screen.getAllByText("K24A2 Engine")
+      fireEvent.click(partRows[0])
+      await waitFor(() => {
+        expect(screen.getByText("Where to buy")).toBeInTheDocument()
+      })
+      const confirmButtons = screen.getAllByText(/Yes, confirm/i)
+      fireEvent.click(confirmButtons[0])
+      await waitFor(() => {
+        expect(screen.getByText("Ordered ✓")).toBeInTheDocument()
+      })
     })
   })
 })

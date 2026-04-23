@@ -15,6 +15,7 @@ from app.schemas.builds import (
     GeneratePartsRequest,
     GeneratePartsResponse,
     GenerateResponse,
+    OrderPartRequest,
     PartResponse,
 )
 from app.services.vision_service import analyse_car_image
@@ -51,16 +52,52 @@ def _insert_parts(
     build_id: str,
     parts: list[dict[str, Any]],
 ) -> int:
-    """Delete existing AI parts and insert new ones. Returns count inserted."""
+    """Delete existing AI parts and insert new ones with vendors. Returns count inserted."""
     if not parts:
         return 0
 
     # Remove previously generated parts before re-populating
     supabase.table("parts").delete().eq("build_id", build_id).execute()
 
-    rows = [{**p, "build_id": build_id} for p in parts]
-    supabase.table("parts").insert(rows).execute()
-    return len(rows)
+    inserted_count = 0
+    for part_data in parts:
+        # Extract vendors before inserting part
+        vendors = part_data.pop("vendors", [])
+
+        # Remove vendor-only fields that shouldn't be in parts table
+        part_data.pop("price", None)  # Use price_estimate instead
+        part_data.pop("currency", None)
+        part_data.pop("ships_from", None)
+        part_data.pop("estimated_days_min", None)
+        part_data.pop("estimated_days_max", None)
+        part_data.pop("shipping_cost", None)
+
+        # Insert the part
+        part_row = {**part_data, "build_id": build_id}
+        result = supabase.table("parts").insert([part_row]).execute()
+
+        # Get the inserted part's ID
+        if result.data and len(result.data) > 0:
+            inserted_part_id = result.data[0]["id"]
+            inserted_count += 1
+
+            # Insert vendors for this part
+            for vendor_data in vendors:
+                vendor_row = {
+                    "part_id": inserted_part_id,
+                    "vendor_name": vendor_data.get("vendor_name"),
+                    "vendor_url": vendor_data.get("vendor_url"),
+                    "price": vendor_data.get("price"),
+                    "currency": vendor_data.get("currency", "USD"),
+                    "ships_from": vendor_data.get("ships_from"),
+                    "estimated_days_min": vendor_data.get("estimated_days_min"),
+                    "estimated_days_max": vendor_data.get("estimated_days_max"),
+                    "shipping_cost": vendor_data.get("shipping_cost"),
+                    "is_primary": vendor_data.get("is_primary", False),
+                }
+                supabase.table("part_vendors").insert([vendor_row]).execute()
+
+    return inserted_count
 
 
 async def _vision_analyse_and_populate(
@@ -183,7 +220,7 @@ async def get_build(build_id: str, user: CurrentUser = Depends(get_current_user)
 
     response = (
         supabase.table("builds")
-        .select("*, parts(*)")
+        .select("*, parts(*, part_vendors!part_vendors_part_id_fkey(*))")
         .eq("user_id", user["id"])
         .eq("id", build_id)
         .single()
@@ -299,7 +336,7 @@ async def patch_build(
 
     fresh = (
         supabase.table("builds")
-        .select("*, parts(*)")
+        .select("*, parts(*, part_vendors!part_vendors_part_id_fkey(*))")
         .eq("id", build_id)
         .single()
         .execute()
@@ -448,7 +485,7 @@ async def generate_parts(
 
     build_row = (
         supabase.table("builds")
-        .select("*, parts(*)")
+        .select("*, parts(*, part_vendors!part_vendors_part_id_fkey(*))")
         .eq("user_id", user["id"])
         .eq("id", build_id)
         .single()
@@ -468,11 +505,8 @@ async def generate_parts(
         )
 
     try:
-        suggested_parts = await generate_parts_for_build(
-            car=build_data.get("donor_car"),
-            modification_goal=build_data.get("modification_goal"),
-            goals=goals,
-        )
+        result = await generate_parts_for_build(build_data)
+        parts = result.get("parts", [])
     except Exception as exc:
         logger.exception("Parts generation failed for build %s", build_id)
         raise HTTPException(
@@ -480,12 +514,12 @@ async def generate_parts(
             detail="Parts generation failed",
         ) from exc
 
-    count = _insert_parts(supabase, build_id, suggested_parts)
+    count = _insert_parts(supabase, build_id, parts)
 
     # Return the updated build with freshly inserted parts
     fresh = (
         supabase.table("builds")
-        .select("*, parts(*)")
+        .select("*, parts(*, part_vendors!part_vendors_part_id_fkey(*))")
         .eq("id", build_id)
         .single()
         .execute()
@@ -514,7 +548,7 @@ async def generate_parts_for_build_new(
     # Verify build ownership and get build data
     build_row = (
         supabase.table("builds")
-        .select("*, parts(*)")
+        .select("*, parts(*, part_vendors!part_vendors_part_id_fkey(*))")
         .eq("user_id", user["id"])
         .eq("id", build_id)
         .single()
@@ -601,7 +635,7 @@ async def generate_parts_for_build_new(
     # Fetch updated parts with all fields
     fresh = (
         supabase.table("builds")
-        .select("*, parts(*)")
+        .select("*, parts(*, part_vendors!part_vendors_part_id_fkey(*))")
         .eq("id", build_id)
         .single()
         .execute()
@@ -689,3 +723,70 @@ async def update_part(
         )
 
     return cast(dict[str, Any], result.data[0])
+
+
+@router.post("/builds/{build_id}/parts/{part_id}/order")
+async def order_part(
+    build_id: str,
+    part_id: str,
+    payload: OrderPartRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> PartResponse:
+    """Order a part from a specific vendor."""
+    supabase = get_supabase(user["access_token"])
+
+    # Verify build ownership
+    build_check = (
+        supabase.table("builds")
+        .select("id")
+        .eq("user_id", user["id"])
+        .eq("id", build_id)
+        .single()
+        .execute()
+    )
+
+    if not build_check.data:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    # Verify vendor exists and belongs to this part
+    vendor_check = (
+        supabase.table("part_vendors")
+        .select("id")
+        .eq("id", payload.vendor_id)
+        .eq("part_id", part_id)
+        .single()
+        .execute()
+    )
+
+    if not vendor_check.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor not found")
+
+    # Update the part with order information
+    from datetime import datetime
+    result = (
+        supabase.table("parts")
+        .update({
+            "status": "ordered",
+            "ordered_from_vendor_id": payload.vendor_id,
+            "ordered_at": datetime.utcnow().isoformat()
+        })
+        .eq("id", part_id)
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to order part",
+        )
+
+    # Fetch and return the updated part with vendors
+    part = (
+        supabase.table("parts")
+        .select("*, part_vendors!part_vendors_part_id_fkey(*)")
+        .eq("id", part_id)
+        .single()
+        .execute()
+    )
+
+    return cast(dict[str, Any], part.data)

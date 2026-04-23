@@ -9,6 +9,7 @@ import type { BuildDetail, Part, VisionData } from "@/lib/api/builds"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PartDetailDrawer } from "./PartDetailDrawer"
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -340,7 +341,7 @@ function StateBPanel({
       </Button>
       {generating && (
         <p className="text-xs text-muted-foreground">
-          Claude is building your parts list — this takes ~15 seconds.
+          Building your parts list — this takes ~15 seconds.
         </p>
       )}
     </main>
@@ -351,10 +352,18 @@ function CentrePanel({
   build,
   state,
   onPartsGenerated,
+  onAdvisorOpen,
+  onPartClick,
+  advisorButtonRef,
+  hasUnread,
 }: {
   build: BuildDetail
   state: WorkspaceState
   onPartsGenerated: (updatedBuild: BuildDetail) => void
+  onAdvisorOpen: () => void
+  onPartClick?: (part: Part) => void
+  advisorButtonRef: React.RefObject<HTMLButtonElement | null>
+  hasUnread: boolean
 }) {
   if (state === "A") {
     return (
@@ -394,7 +403,7 @@ function CentrePanel({
   const totalCost = build.parts.reduce((sum, p) => sum + (p.price_estimate ?? 0), 0)
 
   return (
-    <main className="flex flex-col overflow-hidden">
+    <main className="flex flex-col overflow-hidden relative">
       {/* Toolbar */}
       <div className="flex items-center gap-4 border-b border-border px-4 py-2">
         <button type="button" className="text-sm font-medium text-foreground border-b-2 border-brand pb-2">
@@ -408,6 +417,50 @@ function CentrePanel({
         </button>
       </div>
 
+      {/* Floating Ask Advisor Button */}
+      <button
+        ref={advisorButtonRef}
+        onClick={onAdvisorOpen}
+        style={{
+          position: 'absolute',
+          bottom: '68px',
+          right: '20px',
+          zIndex: 10,
+          background: '#D97706',
+          color: 'white',
+          border: 'none',
+          borderRadius: '99px',
+          padding: '10px 18px',
+          fontSize: '13px',
+          fontWeight: 500,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontFamily: 'inherit',
+        }}
+        aria-label="Open advisor"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16"
+             fill="none" stroke="white" strokeWidth="1.5"
+             strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 10c0 .884-.716 1.6-1.6 1.6H4.8L2 14V4.6C2 3.716 2.716 3 3.6 3h8.8c.884 0 1.6.716 1.6 1.6V10z"/>
+        </svg>
+        <span>Ask advisor</span>
+        {hasUnread && (
+          <div style={{
+            width: '10px',
+            height: '10px',
+            borderRadius: '50%',
+            background: 'white',
+            border: '2px solid #D97706',
+            position: 'absolute',
+            top: '-3px',
+            right: '-3px',
+          }}/>
+        )}
+      </button>
+
       {/* Parts grouped by goal */}
       <div className="flex-1 overflow-y-auto">
         {byGoal.map(({ goal, colour, parts, cost }) => (
@@ -419,7 +472,7 @@ function CentrePanel({
               {cost > 0 && <span className="text-xs text-muted-foreground">{formatCurrency(cost)}</span>}
             </div>
             {parts.map((part) => (
-              <PartRow key={part.id} part={part} />
+              <PartRow key={part.id} part={part} onPartClick={onPartClick} />
             ))}
           </div>
         ))}
@@ -435,17 +488,117 @@ function CentrePanel({
   )
 }
 
-function PartRow({ part }: { part: Part }) {
+function getCategoryColor(category?: string): string {
+  switch (category?.toLowerCase()) {
+    case "engine":
+    case "drivetrain":
+      return "#FEF3C7"
+    case "electrical":
+      return "#F0FDF4"
+    case "cooling":
+      return "#FEF3C7"
+    case "safety":
+      return "#FEF2F2"
+    default:
+      return "var(--color-background-secondary)"
+  }
+}
+
+function CategoryIcon({ category }: { category?: string }) {
+  const size = 16
+
+  switch (category?.toLowerCase()) {
+    case "engine":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="size-4">
+          <rect x="3" y="3" width="18" height="18" rx="1" strokeWidth="1.5" />
+          <path d="M7 9h10M7 12h10M7 15h6" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      )
+    case "electrical":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="size-4">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeWidth="1.5" strokeLinejoin="round" />
+        </svg>
+      )
+    case "safety":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="size-4">
+          <path d="M12 1L4 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-8-4z" strokeWidth="1.5" />
+          <circle cx="12" cy="12" r="4" strokeWidth="1.5" fill="currentColor" />
+        </svg>
+      )
+    case "drivetrain":
+      return (
+        <svg viewBox="0 0 24 24" fill="currentColor" className="size-4">
+          <circle cx="7" cy="12" r="3" />
+          <circle cx="17" cy="12" r="3" />
+          <path d="M10 12h4" strokeWidth="1.5" stroke="currentColor" />
+        </svg>
+      )
+    default:
+      return (
+        <svg viewBox="0 0 24 24" fill="currentColor" className="size-4">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+        </svg>
+      )
+  }
+}
+
+function PartRow({ part, onPartClick }: { part: Part; onPartClick?: (part: Part) => void }) {
+  const [imageError, setImageError] = React.useState(false)
+  const bgColor = getCategoryColor(part.category)
+
+  const openVendor = () => {
+    if (part.vendor_url) {
+      window.open(part.vendor_url, "_blank")
+    }
+  }
+
   return (
-    <div className="border-b border-border/50 px-4 py-2.5 hover:bg-muted/20">
+    <div
+      className="border-b border-border/50 px-4 py-2.5 hover:bg-muted/20 cursor-pointer"
+      onClick={() => onPartClick?.(part)}
+    >
       <div className="flex items-center gap-3">
-        <span className="flex-1 truncate text-sm font-medium">{part.name}</span>
+        {/* Image or Category Icon */}
+        <div
+          className="size-10 shrink-0 rounded flex items-center justify-center border border-border/50 cursor-pointer hover:opacity-80"
+          style={{ backgroundColor: imageError || !part.image_url ? bgColor : "transparent" }}
+          onClick={openVendor}
+          title={part.vendor_url ? "Click to view on vendor website" : "No vendor link"}
+        >
+          {!imageError && part.image_url ? (
+            <img
+              src={part.image_url}
+              alt={part.name}
+              className="size-full object-cover rounded"
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <CategoryIcon category={part.category} />
+          )}
+        </div>
+
+        {/* Name and Description */}
+        <div className="flex-1 min-w-0">
+          <span className="block truncate text-sm font-medium">{part.name}</span>
+          {part.description && (
+            <p className="text-xs text-muted-foreground line-clamp-1">{part.description}</p>
+          )}
+        </div>
+
+        {/* Status */}
         <PartStatusPill status={part.status} />
+
+        {/* Price */}
         {part.price_estimate != null && (
           <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">
             {formatCurrency(part.price_estimate)}
           </span>
         )}
+
+        {/* Safety Flag */}
         {part.is_safety_critical && (
           <span title="Safety critical" className="shrink-0 text-red-500">
             <svg viewBox="0 0 20 20" fill="currentColor" className="size-3.5">
@@ -454,9 +607,8 @@ function PartRow({ part }: { part: Part }) {
           </span>
         )}
       </div>
-      {part.description && (
-        <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{part.description}</p>
-      )}
+
+      {/* Notes */}
       {part.notes && (
         <p className="mt-0.5 text-xs text-amber-700 line-clamp-1">
           <span className="font-medium">Note: </span>{part.notes}
@@ -468,101 +620,17 @@ function PartRow({ part }: { part: Part }) {
 
 // ── Right panel (Advisor) ─────────────────────────────────────────────────
 
-function AdvisorPanel({ build, state }: { build: BuildDetail; state: WorkspaceState }) {
-  const [input, setInput] = React.useState("")
-
-  const message =
-    state === "A"
-      ? `I can see you're working on your ${build.car ?? "build"}. What are you looking to do with it?`
-      : state === "B"
-      ? `You want to ${build.modification_goal}. Ready to generate your parts list when you are.`
-      : `Your parts list is ready — ${build.parts_total ?? build.parts.length} parts across ${(build.goals ?? []).length} goals.`
-
-  const chips: string[] =
-    state === "A"
-      ? []
-      : state === "B"
-      ? ["Tell me more about this build", "Generate now"]
-      : ["What should I do first?", "Find a mechanic in Nairobi", "What's the total timeline?"]
-
-  return (
-    <aside className="flex flex-col border-l border-border">
-      {/* Header */}
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <span className="size-2 rounded-full bg-emerald-500" />
-        <span className="text-sm font-semibold">Advisor</span>
-        <span className="ml-auto text-xs text-muted-foreground truncate">
-          {build.car ?? build.title}
-        </span>
-      </div>
-
-      {/* Context pill */}
-      <div className="px-4 py-2">
-        <span className="inline-flex max-w-full truncate rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-          {(build.goals ?? []).slice(0, 2).join(" · ")}
-          {(build.goals ?? []).length > 2 && ` +${(build.goals ?? []).length - 2}`}
-        </span>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-2">
-        <div className="rounded-xl bg-muted px-3 py-2.5 text-sm text-foreground">
-          {message}
-        </div>
-
-        {chips.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {chips.map((chip) => (
-              <button
-                key={chip}
-                type="button"
-                onClick={() => toast.info("Advisor streaming coming soon")}
-                className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-muted-foreground hover:border-brand/60 hover:text-foreground transition-colors"
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Input */}
-      <div className="border-t border-border p-3">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                toast.info("Advisor streaming coming soon")
-                setInput("")
-              }
-            }}
-            placeholder="Ask about your build…"
-            className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-brand"
-          />
-          <Button
-            type="button"
-            size="sm"
-            className="bg-brand text-white hover:bg-brand/90 shrink-0"
-            onClick={() => {
-              toast.info("Advisor streaming coming soon")
-              setInput("")
-            }}
-          >
-            Send
-          </Button>
-        </div>
-      </div>
-    </aside>
-  )
-}
 
 // ── Root ──────────────────────────────────────────────────────────────────
 
 export function BuildWorkspace({ build: initialBuild }: { build: BuildDetail }) {
   const [build, setBuild] = React.useState(initialBuild)
+  const [advisorOpen, setAdvisorOpen] = React.useState(false)
+  const [hasUnread, setHasUnread] = React.useState(true)
+  const [selectedPart, setSelectedPart] = React.useState<Part | null>(null)
+  const [partDrawerOpen, setPartDrawerOpen] = React.useState(false)
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  const advisorButtonRef = React.useRef<HTMLButtonElement>(null)
   const state = getState(build)
 
   function handleImageUploaded(url: string) {
@@ -573,11 +641,360 @@ export function BuildWorkspace({ build: initialBuild }: { build: BuildDetail }) 
     setBuild(updatedBuild)
   }
 
+  function openAdvisor() {
+    setAdvisorOpen(true)
+    setHasUnread(false)
+    setTimeout(() => textareaRef.current?.focus(), 260)
+  }
+
+  function closeAdvisor() {
+    setAdvisorOpen(false)
+    setTimeout(() => advisorButtonRef.current?.focus(), 260)
+  }
+
+  function openPartDetail(part: Part) {
+    setSelectedPart(part)
+    setPartDrawerOpen(true)
+  }
+
+  function closePartDetail() {
+    setPartDrawerOpen(false)
+    setSelectedPart(null)
+  }
+
+  function handlePartOrdered(updatedPart: Part) {
+    setBuild((prev) => ({
+      ...prev,
+      parts: prev.parts.map((p) => (p.id === updatedPart.id ? updatedPart : p)),
+    }))
+  }
+
+  React.useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && advisorOpen) {
+        closeAdvisor()
+      }
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [advisorOpen])
+
   return (
-    <div className="grid h-screen grid-cols-[200px_1fr_256px] overflow-hidden">
-      <LeftPanel build={build} onImageUploaded={handleImageUploaded} />
-      <CentrePanel build={build} state={state} onPartsGenerated={handlePartsGenerated} />
-      <AdvisorPanel build={build} state={state} />
-    </div>
+    <>
+      <div className="grid h-screen grid-cols-[200px_1fr] overflow-hidden">
+        <LeftPanel build={build} onImageUploaded={handleImageUploaded} />
+        <CentrePanel
+          build={build}
+          state={state}
+          onPartsGenerated={handlePartsGenerated}
+          onAdvisorOpen={openAdvisor}
+          onPartClick={openPartDetail}
+          advisorButtonRef={advisorButtonRef}
+          hasUnread={hasUnread}
+        />
+      </div>
+
+      {/* Backdrop */}
+      {advisorOpen && (
+        <div
+          onClick={closeAdvisor}
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.25)',
+            zIndex: 40,
+            animation: 'fadeIn 200ms ease'
+          }}
+        />
+      )}
+
+      {/* Drawer */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Build advisor"
+        style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          height: '100vh',
+          width: 'min(420px, 100vw)',
+          background: 'var(--color-background-primary, white)',
+          borderLeft: '0.5px solid var(--color-border-tertiary)',
+          zIndex: 50,
+          display: 'flex',
+          flexDirection: 'column',
+          transform: advisorOpen
+            ? 'translateX(0)'
+            : 'translateX(100%)',
+          transition: 'transform 250ms ease-out',
+        }}
+      >
+        {/* Drawer header */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '12px 16px',
+          borderBottom: '0.5px solid var(--color-border-tertiary)',
+          flexShrink: 0,
+        }}>
+          <div style={{
+            width: '7px', height: '7px',
+            borderRadius: '50%',
+            background: 'var(--color-text-success)',
+            flexShrink: 0,
+          }}/>
+          <span style={{
+            fontSize: '14px',
+            fontWeight: 500,
+            color: 'var(--color-text-primary)',
+          }}>
+            Advisor
+          </span>
+          <span style={{
+            fontSize: '11px',
+            color: 'var(--color-text-tertiary)',
+            marginLeft: 'auto',
+            marginRight: '8px',
+          }}>
+            {build.parts.length > 0
+              ? `${build.parts.length} parts loaded`
+              : build.modification_goal
+              ? 'goal set'
+              : 'waiting for goal'}
+          </span>
+          <button
+            onClick={closeAdvisor}
+            aria-label="Close advisor"
+            style={{
+              width: '28px',
+              height: '28px',
+              border: '0.5px solid var(--color-border-secondary)',
+              borderRadius: '7px',
+              background: 'transparent',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '16px',
+              color: 'var(--color-text-secondary)',
+              fontFamily: 'inherit',
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Context pill */}
+        <div style={{
+          margin: '10px 14px 0',
+          padding: '8px 11px',
+          background: 'var(--color-background-secondary)',
+          borderRadius: '8px',
+          border: '0.5px solid var(--color-border-tertiary)',
+          flexShrink: 0,
+        }}>
+          <div style={{
+            fontSize: '12px',
+            fontWeight: 500,
+            color: 'var(--color-text-primary)',
+          }}>
+            {build.car ?? 'Car not set'}
+            {(build.goals?.length ?? 0) > 0
+              ? ` · ${build.goals?.length} goals`
+              : ''}
+          </div>
+          {(build.goals?.length ?? 0) > 0 && (
+            <div style={{
+              fontSize: '11px',
+              color: 'var(--color-text-tertiary)',
+              marginTop: '2px',
+            }}>
+              {(build.goals ?? []).slice(0, 3).join(' · ')}
+            </div>
+          )}
+        </div>
+
+        {/* Messages — scrollable */}
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '12px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+        }}>
+          {/* Opening message based on build state */}
+          <div style={{
+            background: 'var(--color-background-secondary)',
+            borderRadius: '4px 12px 12px 12px',
+            padding: '10px 14px',
+            fontSize: '13px',
+            color: 'var(--color-text-primary)',
+            lineHeight: 1.6,
+            maxWidth: '88%',
+          }}>
+            {build.parts.length > 0
+              ? `Your parts list is ready — ${build.parts.length} parts across ${build.goals?.length ?? 1} goal${(build.goals?.length ?? 1) > 1 ? 's' : ''}. What do you need help with?`
+              : build.modification_goal
+              ? `You want to ${build.modification_goal}. Ready to generate your parts list when you are.`
+              : `I can see you're working on your ${build.car ?? 'build'}. What are you looking to do with it?`
+            }
+          </div>
+
+          {/* Safety flag message if parts have safety items */}
+          {build.parts.some(p => p.is_safety_critical) && (
+            <div style={{
+              background: 'var(--color-background-warning)',
+              border: '0.5px solid var(--color-border-warning)',
+              borderRadius: '4px 12px 12px 12px',
+              padding: '10px 14px',
+              fontSize: '13px',
+              color: 'var(--color-text-warning)',
+              lineHeight: 1.6,
+              maxWidth: '88%',
+            }}>
+              <div style={{
+                fontSize: '10px',
+                fontWeight: 500,
+                marginBottom: '3px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}>
+                Safety flags
+              </div>
+              {build.parts.filter(p => p.is_safety_critical).length} safety-critical items in your build.
+              Review these before starting work.
+            </div>
+          )}
+        </div>
+
+        {/* Suggestion chips */}
+        {build.parts.length > 0 && (
+          <div style={{
+            padding: '6px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '5px',
+            flexShrink: 0,
+          }}>
+            {[
+              'What should I do first?',
+              'Find a mechanic near me',
+              'Which parts can I source locally?',
+              'What is the total timeline?',
+            ].map(chip => (
+              <button
+                key={chip}
+                style={{
+                  padding: '8px 11px',
+                  background: 'var(--color-background-secondary)',
+                  border: '0.5px solid var(--color-border-tertiary)',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  color: 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  fontFamily: 'inherit',
+                  lineHeight: 1.4,
+                }}
+                onClick={() => {
+                  const ta = textareaRef.current
+                  if (ta) {
+                    ta.value = chip
+                    ta.focus()
+                  }
+                }}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Input */}
+        <div style={{
+          padding: '10px 14px 16px',
+          borderTop: '0.5px solid var(--color-border-tertiary)',
+          flexShrink: 0,
+        }}>
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            alignItems: 'flex-end',
+            background: 'var(--color-background-secondary)',
+            border: '0.5px solid var(--color-border-tertiary)',
+            borderRadius: '10px',
+            padding: '9px 12px',
+          }}>
+            <textarea
+              ref={textareaRef}
+              placeholder="Ask about your build..."
+              rows={1}
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                fontSize: '13px',
+                color: 'var(--color-text-primary)',
+                fontFamily: 'inherit',
+                outline: 'none',
+                resize: 'none',
+                minHeight: '20px',
+                maxHeight: '100px',
+                lineHeight: 1.5,
+              }}
+              onInput={e => {
+                const t = e.currentTarget
+                t.style.height = 'auto'
+                t.style.height = t.scrollHeight + 'px'
+              }}
+            />
+            <button
+              style={{
+                width: '28px',
+                height: '28px',
+                background: '#D97706',
+                border: 'none',
+                borderRadius: '7px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+              aria-label="Send message"
+            >
+              <svg width="12" height="12" viewBox="0 0 14 14"
+                   fill="none" stroke="white"
+                   strokeWidth="2.2" strokeLinecap="round"
+                   strokeLinejoin="round">
+                <line x1="13" y1="1" x2="6" y2="8"/>
+                <polygon points="13 1 8 13 6 8 1 6 13 1"
+                         fill="white" stroke="none"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0 }
+          to { opacity: 1 }
+        }
+      `}</style>
+
+      <PartDetailDrawer
+        part={selectedPart}
+        buildId={build.id}
+        open={partDrawerOpen}
+        onClose={closePartDetail}
+        onOrdered={handlePartOrdered}
+      />
+    </>
   )
 }
