@@ -1,0 +1,3441 @@
+openapi: 3.0.0
+
+info:
+  title: Wrench API
+  version: 1.0.0
+  description: |
+    Project car AI assistant and build planner API.
+
+    ## Authentication
+    Wrench uses JWT Bearer tokens for authentication.
+    - Access tokens expire after 15 minutes (NFR-14)
+    - Refresh tokens expire after 7 days
+    - All auth endpoints are rate limited to 5 attempts
+      per IP per 15 minutes (NFR-16)
+
+    ## Channel Authorization
+    All requests must include the channel token header:
+    X-Channel-Token: {token}
+    Requests without this header are rejected by Kong
+    before reaching the API.
+
+servers:
+  - url: https://api.wrench.ai/v1
+    description: Production
+  - url: http://localhost:8080/v1
+    description: Local development
+
+# =================================================
+# COMPONENTS — one block, all schemas, all responses
+# =================================================
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT access token. Expires in 15 minutes.
+        Obtain via /auth/login or /auth/register.
+
+  parameters:
+    ChannelToken:
+      in: header
+      name: X-Channel-Token
+      required: true
+      schema:
+        type: string
+      description: |
+        Channel authorization token. Required on all
+        requests. Validated by Kong API Gateway.
+
+  # -----------------------------------------------
+  # REUSABLE RESPONSES
+  # -----------------------------------------------
+
+  responses:
+    UnauthorizedError:
+      description: Missing or invalid access token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            type: https://api.wrench.ai/errors/unauthorized
+            title: Unauthorized
+            status: 401
+            detail: Access token is missing or invalid
+            instance: /v1/auth/refresh
+            requestId: 01HXYZ123ABC
+
+    RateLimitError:
+      description: Too many requests
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until rate limit resets
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            type: https://api.wrench.ai/errors/rate-limited
+            title: Too Many Requests
+            status: 429
+            detail: Too many attempts. Try again in 15 minutes.
+            instance: /v1/auth/login
+            requestId: 01HXYZ123ABC
+
+    ValidationError:
+      description: Request body failed validation
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/Error'
+              - type: object
+                properties:
+                  fields:
+                    type: object
+                    description: Per-field validation errors
+                    additionalProperties:
+                      type: string
+                    example:
+                      email: Must be a valid email address
+                      password: Must be at least 8 characters
+
+    NotFoundError:
+      description: Resource not found or does not belong to user
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            type: https://api.wrench.ai/errors/not-found
+            title: Not Found
+            status: 404
+            detail: Resource not found
+            instance: /v1/cars/550e8400
+            requestId: 01HXYZ123ABC
+
+  # -----------------------------------------------
+  # ALL SCHEMAS
+  # -----------------------------------------------
+
+  schemas:
+
+    # ─────────────────────────────────────────
+    # SHARED / ERROR
+    # ─────────────────────────────────────────
+
+    Error:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
+      properties:
+        type:
+          type: string
+          description: URI identifying the error type
+          example: https://api.wrench.ai/errors/invalid-credentials
+        title:
+          type: string
+          description: Short human-readable summary
+          example: Invalid credentials
+        status:
+          type: integer
+          description: HTTP status code
+          example: 401
+        detail:
+          type: string
+          description: Human-readable explanation
+          example: The email or password is incorrect
+        instance:
+          type: string
+          description: The request URI that caused the error
+          example: /v1/auth/login
+        requestId:
+          type: string
+          description: Trace ID for debugging
+          example: 01HXYZ123ABC
+
+    CursorPagination:
+      type: object
+      properties:
+        nextCursor:
+          type: string
+          nullable: true
+          description: |
+            Pass as cursor param in next request.
+            null means you are on the last page.
+          example: eyJpZCI6IjU1MGU4N...
+        hasMore:
+          type: boolean
+          example: true
+        total:
+          type: integer
+          description: |
+            Total record count.
+            Avoid using for pagination logic — use
+            hasMore and nextCursor instead.
+          example: 47
+
+    # ─────────────────────────────────────────
+    # AUTH
+    # ─────────────────────────────────────────
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - displayName
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          description: |
+            Min 8 characters. Max 72 (bcrypt limit).
+            Must contain uppercase, lowercase, and a number.
+          example: MyStr0ngPass!
+        displayName:
+          type: string
+          minLength: 2
+          maxLength: 50
+          example: John Doe
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          example: MyStr0ngPass!
+
+    RefreshRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+          description: |
+            The refresh token issued at login.
+            Single use — a new refresh token is
+            issued with every refresh (rotation).
+          example: eyJhbGc...
+
+    ForgotPasswordRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+
+    ResetPasswordRequest:
+      type: object
+      required:
+        - token
+        - newPassword
+      properties:
+        token:
+          type: string
+          description: Reset token received via email
+          example: abc123def456
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 72
+          example: MyNewStr0ngPass!
+
+    AuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: JWT. Valid for 15 minutes.
+          example: eyJhbGciOiJIUzI1NiJ9...
+        refreshToken:
+          type: string
+          description: |
+            Single-use. Valid for 7 days.
+            Rotated on every refresh call.
+          example: dGhpcyBpcyBh...
+        tokenType:
+          type: string
+          enum: [Bearer]
+          example: Bearer
+        expiresIn:
+          type: integer
+          description: Access token TTL in seconds
+          example: 900
+        user:
+          $ref: '#/components/schemas/UserSummary'
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        displayName:
+          type: string
+          example: John Doe
+        avatarUrl:
+          type: string
+          nullable: true
+          example: https://res.cloudinary.com/wrench/...
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        phoneNumber:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, suspended]
+        lastLogin:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    UpdateProfileRequest:
+      type: object
+      description: All fields optional
+      properties:
+        displayName:
+          type: string
+          minLength: 2
+          maxLength: 50
+        phoneNumber:
+          type: string
+          nullable: true
+          maxLength: 20
+
+    UpdatePasswordRequest:
+      type: object
+      required:
+        - currentPassword
+        - newPassword
+      properties:
+        currentPassword:
+          type: string
+          example: MyStr0ngPass!
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 72
+          example: MyNewStr0ngPass!
+
+    # ─────────────────────────────────────────
+    # CARS
+    # ─────────────────────────────────────────
+
+    CreateCarRequest:
+      type: object
+      required:
+        - make
+        - model
+        - year
+        - engine
+        - usageType
+      properties:
+        make:
+          type: string
+          maxLength: 50
+          example: Nissan
+        model:
+          type: string
+          maxLength: 50
+          example: 350Z
+        year:
+          type: integer
+          minimum: 1885
+          maximum: 2030
+          example: 2003
+        engine:
+          type: string
+          maxLength: 100
+          example: VQ35DE 3.5L V6
+        usageType:
+          type: string
+          enum: [daily, track, show, project, off-road, weekend]
+          example: track
+        notes:
+          type: string
+          maxLength: 1000
+          nullable: true
+          example: Track build, not road registered
+
+    UpdateCarRequest:
+      type: object
+      description: All fields optional — only provided fields updated
+      properties:
+        make:
+          type: string
+          maxLength: 50
+        model:
+          type: string
+          maxLength: 50
+        year:
+          type: integer
+          minimum: 1885
+          maximum: 2030
+        engine:
+          type: string
+          maxLength: 100
+        usageType:
+          type: string
+          enum: [daily, track, show, project, off-road, weekend]
+        notes:
+          type: string
+          maxLength: 1000
+          nullable: true
+
+    CarSummary:
+      type: object
+      description: Lightweight car object for list views
+      properties:
+        id:
+          type: string
+          format: uuid
+        make:
+          type: string
+          example: Nissan
+        model:
+          type: string
+          example: 350Z
+        year:
+          type: integer
+          example: 2003
+        engine:
+          type: string
+          example: VQ35DE 3.5L V6
+        usageType:
+          type: string
+          example: track
+        primaryPhotoUrl:
+          type: string
+          nullable: true
+        modCount:
+          type: integer
+          example: 12
+        createdAt:
+          type: string
+          format: date-time
+
+    CarDetail:
+      allOf:
+        - $ref: '#/components/schemas/CarSummary'
+        - type: object
+          properties:
+            notes:
+              type: string
+              nullable: true
+            recentMods:
+              type: array
+              description: 5 most recent modifications
+              items:
+                $ref: '#/components/schemas/CarMod'
+            recentService:
+              type: array
+              description: 5 most recent service records
+              items:
+                $ref: '#/components/schemas/ServiceRecord'
+            updatedAt:
+              type: string
+              format: date-time
+
+    # ─────────────────────────────────────────
+    # MODIFICATIONS
+    # ─────────────────────────────────────────
+
+    CreateModRequest:
+      type: object
+      required:
+        - name
+        - category
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: BC Racing BR Series Coilovers
+        category:
+          type: string
+          enum:
+            - suspension
+            - engine
+            - brakes
+            - exhaust
+            - wheels
+            - exterior
+            - interior
+            - electronics
+            - forced_induction
+            - drivetrain
+            - other
+          example: suspension
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+          example: Dropped 35mm front and rear, corner balanced
+        notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+        cost:
+          type: integer
+          description: Cost in cents. 150000 = $1,500.00
+          minimum: 0
+          example: 150000
+        installationDate:
+          type: string
+          format: date
+          nullable: true
+          example: "2024-03-15"
+        isPlanned:
+          type: boolean
+          default: false
+          description: |
+            true = planned mod not yet installed.
+            false = already installed.
+        source:
+          type: string
+          enum: [user, ai_assistant, ai_vision]
+          default: user
+          description: |
+            Who created this record.
+            user = manually logged.
+            ai_assistant = created by AI chat.
+            ai_vision = generated from inspiration image.
+
+    UpdateModRequest:
+      type: object
+      description: All fields optional
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        category:
+          type: string
+          enum:
+            - suspension
+            - engine
+            - brakes
+            - exhaust
+            - wheels
+            - exterior
+            - interior
+            - electronics
+            - forced_induction
+            - drivetrain
+            - other
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+        notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+        cost:
+          type: integer
+          minimum: 0
+        installationDate:
+          type: string
+          format: date
+          nullable: true
+        isPlanned:
+          type: boolean
+        confirmed:
+          type: boolean
+          description: |
+            Set true to confirm an AI-generated mod.
+            Once confirmed, treated as verified data
+            in RAG context.
+
+    CarMod:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        carId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: BC Racing BR Series Coilovers
+        category:
+          type: string
+          example: suspension
+        description:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        cost:
+          type: integer
+          description: Cost in cents
+          example: 150000
+        costFormatted:
+          type: string
+          description: Human-readable cost. Derived field.
+          example: "$1,500.00"
+        installationDate:
+          type: string
+          format: date
+          nullable: true
+        isPlanned:
+          type: boolean
+        source:
+          type: string
+          enum: [user, ai_assistant, ai_vision]
+        confirmed:
+          type: boolean
+        photos:
+          type: array
+          items:
+            type: string
+          description: Cloudinary URLs for mod photos
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ─────────────────────────────────────────
+    # SERVICE RECORDS
+    # ─────────────────────────────────────────
+
+    CreateServiceRequest:
+      type: object
+      required:
+        - type
+        - mileage
+      properties:
+        type:
+          type: string
+          enum:
+            - oil_change
+            - tyre_rotation
+            - brake_service
+            - timing_belt
+            - coolant_flush
+            - transmission_service
+            - differential_service
+            - alignment
+            - inspection
+            - other
+          example: oil_change
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+          example: Castrol Edge 5W-30, OEM filter
+        notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+        mileage:
+          type: integer
+          minimum: 0
+          example: 87000
+        cost:
+          type: integer
+          description: Cost in cents
+          minimum: 0
+          nullable: true
+          example: 8500
+        servicedAt:
+          type: string
+          format: date
+          description: Defaults to today if omitted
+          example: "2024-03-15"
+        performedBy:
+          type: string
+          maxLength: 100
+          nullable: true
+          description: Shop name or DIY
+          example: Apex Performance Workshop
+        nextServiceMileage:
+          type: integer
+          nullable: true
+          description: Recommended mileage for next service
+          example: 90000
+
+    UpdateServiceRequest:
+      type: object
+      description: All fields optional
+      properties:
+        type:
+          type: string
+          enum:
+            - oil_change
+            - tyre_rotation
+            - brake_service
+            - timing_belt
+            - coolant_flush
+            - transmission_service
+            - differential_service
+            - alignment
+            - inspection
+            - other
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+        notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+        mileage:
+          type: integer
+          minimum: 0
+        cost:
+          type: integer
+          minimum: 0
+          nullable: true
+        servicedAt:
+          type: string
+          format: date
+        performedBy:
+          type: string
+          maxLength: 100
+          nullable: true
+        nextServiceMileage:
+          type: integer
+          nullable: true
+
+    ServiceRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        carId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          example: oil_change
+        description:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        mileage:
+          type: integer
+          example: 87000
+        cost:
+          type: integer
+          nullable: true
+          example: 8500
+        costFormatted:
+          type: string
+          nullable: true
+          example: "$85.00"
+        servicedAt:
+          type: string
+          format: date
+        performedBy:
+          type: string
+          nullable: true
+          example: Apex Performance Workshop
+        nextServiceMileage:
+          type: integer
+          nullable: true
+          example: 90000
+        receipts:
+          type: array
+          items:
+            type: string
+          description: Cloudinary URLs for receipt photos
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ServiceSummary:
+      type: object
+      description: Aggregate stats returned alongside service list
+      properties:
+        totalSpend:
+          type: integer
+          description: Total service spend in cents
+          example: 450000
+        totalSpendFormatted:
+          type: string
+          example: "$4,500.00"
+        recordCount:
+          type: integer
+          example: 12
+        lastServiceMileage:
+          type: integer
+          example: 87000
+        lastServiceDate:
+          type: string
+          format: date
+          example: "2024-03-15"
+        nextServiceMileage:
+          type: integer
+          nullable: true
+          example: 90000
+
+    # ─────────────────────────────────────────
+    # BUILD PLANNER
+    # ─────────────────────────────────────────
+
+    CreateStageRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: "Stage 1 — Suspension"
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+          example: Full suspension overhaul before track use
+        order:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: Display order. If omitted, appended to end.
+          example: 1
+        estimatedCost:
+          type: integer
+          description: Total estimated cost in cents
+          nullable: true
+          example: 500000
+        source:
+          type: string
+          enum: [user, ai_assistant, ai_vision]
+          default: user
+
+    UpdateStageRequest:
+      type: object
+      description: All fields optional
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+        estimatedCost:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [planned, in_progress, complete]
+        confirmed:
+          type: boolean
+          description: Confirm an AI-generated stage.
+
+    BuildStage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        carId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Stage 1 — Suspension"
+        description:
+          type: string
+          nullable: true
+        order:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [planned, in_progress, complete]
+          example: in_progress
+        estimatedCost:
+          type: integer
+          nullable: true
+          example: 500000
+        estimatedCostFormatted:
+          type: string
+          nullable: true
+          example: "$5,000.00"
+        actualCost:
+          type: integer
+          nullable: true
+          description: Sum of actualCost across all tasks
+          example: 480000
+        actualCostFormatted:
+          type: string
+          nullable: true
+          example: "$4,800.00"
+        source:
+          type: string
+          enum: [user, ai_assistant, ai_vision]
+        confirmed:
+          type: boolean
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/BuildTask'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateTaskRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          example: Install BC Racing coilovers
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+        estimatedCost:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Estimated cost in cents
+          example: 150000
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+          example: "2024-06-01"
+        source:
+          type: string
+          enum: [user, ai_assistant, ai_vision]
+          default: user
+
+    UpdateTaskRequest:
+      type: object
+      description: All fields optional
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+        status:
+          type: string
+          enum: [pending, in_progress, complete]
+          description: |
+            Setting complete automatically sets completedAt.
+            Setting pending or in_progress clears completedAt.
+        estimatedCost:
+          type: integer
+          minimum: 0
+          nullable: true
+        actualCost:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Rolls up to parent stage actualCost.
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        confirmed:
+          type: boolean
+
+    BuildTask:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        stageId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: Install BC Racing coilovers
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, in_progress, complete]
+          example: complete
+        estimatedCost:
+          type: integer
+          nullable: true
+          example: 150000
+        estimatedCostFormatted:
+          type: string
+          nullable: true
+          example: "$1,500.00"
+        actualCost:
+          type: integer
+          nullable: true
+          example: 148000
+        actualCostFormatted:
+          type: string
+          nullable: true
+          example: "$1,480.00"
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        source:
+          type: string
+          enum: [user, ai_assistant, ai_vision]
+        confirmed:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BuildPlan:
+      type: object
+      properties:
+        carId:
+          type: string
+          format: uuid
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/BuildStage'
+        summary:
+          $ref: '#/components/schemas/BuildSummary'
+
+    BuildSummary:
+      type: object
+      description: Rolled-up cost and progress across all stages
+      properties:
+        totalEstimatedCost:
+          type: integer
+          example: 1500000
+        totalEstimatedCostFormatted:
+          type: string
+          example: "$15,000.00"
+        totalActualCost:
+          type: integer
+          example: 480000
+        totalActualCostFormatted:
+          type: string
+          example: "$4,800.00"
+        stageCount:
+          type: integer
+          example: 4
+        completedStages:
+          type: integer
+          example: 1
+        taskCount:
+          type: integer
+          example: 18
+        completedTasks:
+          type: integer
+          example: 6
+        percentComplete:
+          type: number
+          format: float
+          example: 33.3
+
+    # ─────────────────────────────────────────
+    # BUDGET
+    # ─────────────────────────────────────────
+
+    CreateBudgetEntryRequest:
+      type: object
+      required:
+        - description
+        - amount
+        - category
+      properties:
+        description:
+          type: string
+          maxLength: 200
+          example: EBC Yellowstuff front brake pads
+        amount:
+          type: integer
+          description: Amount in cents
+          minimum: 1
+          example: 18500
+        category:
+          type: string
+          enum: [parts, labour, tools, consumables, other]
+          example: parts
+        entryDate:
+          type: string
+          format: date
+          description: Defaults to today if omitted
+          example: "2024-03-15"
+        receiptUrl:
+          type: string
+          nullable: true
+          description: Cloudinary URL of receipt photo
+
+    UpdateBudgetEntryRequest:
+      type: object
+      description: All fields optional
+      properties:
+        description:
+          type: string
+          maxLength: 200
+        amount:
+          type: integer
+          minimum: 1
+        category:
+          type: string
+          enum: [parts, labour, tools, consumables, other]
+        entryDate:
+          type: string
+          format: date
+        receiptUrl:
+          type: string
+          nullable: true
+
+    BudgetEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        carId:
+          type: string
+          format: uuid
+        description:
+          type: string
+        amount:
+          type: integer
+          example: 18500
+        amountFormatted:
+          type: string
+          example: "$185.00"
+        category:
+          type: string
+          example: parts
+        entryDate:
+          type: string
+          format: date
+        receiptUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BudgetResponse:
+      type: object
+      properties:
+        summary:
+          $ref: '#/components/schemas/BudgetSummary'
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetEntry'
+        pagination:
+          $ref: '#/components/schemas/CursorPagination'
+
+    BudgetSummary:
+      type: object
+      properties:
+        unassigned:
+          type: integer
+          description: |
+            Spend logged as budget entries that has not
+            been assigned to a specific build task.
+            
+            Calculated as: totalSpend - buildPlanTotal
+            
+            This is NOT spend the platform is unaware of —
+            the user has entered all of it. It is spend
+            that exists in budget entries but does not
+            appear in any build stage's actualCost.
+            
+            A high unassigned value means the user has
+            logged real spend that isn't reflected in
+            their build plan cost tracking.
+        totalSpend:
+          type: integer
+          description: Total across all budget entries in cents
+          example: 2500000
+        totalSpendFormatted:
+          type: string
+          example: "$25,000.00"
+        byCategory:
+          type: object
+          properties:
+            parts:
+              type: integer
+              example: 1800000
+            labour:
+              type: integer
+              example: 400000
+            tools:
+              type: integer
+              example: 200000
+            consumables:
+              type: integer
+              example: 100000
+            other:
+              type: integer
+              example: 0
+        buildPlanTotal:
+          type: integer
+          description: |
+            Total actualCost from build tasks.
+            Compare with totalSpend to see untracked spend.
+          example: 480000
+        untracked:
+          type: integer
+          description: |
+            totalSpend minus buildPlanTotal.
+            Spend logged in budget entries but not
+            tied to a specific build task.
+          example: 2020000
+
+    # ─────────────────────────────────────────
+    # GARAGE TOOLS
+    # ─────────────────────────────────────────
+
+    CreateToolRequest:
+      type: object
+      required:
+        - name
+        - category
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: Snap-on 1/2 Drive Torque Wrench
+        brand:
+          type: string
+          maxLength: 100
+          nullable: true
+          example: Snap-on
+        category:
+          type: string
+          enum:
+            - hand_tools
+            - power_tools
+            - lifting
+            - measuring
+            - diagnostic
+            - consumables
+            - other
+          example: hand_tools
+        notes:
+          type: string
+          maxLength: 1000
+          nullable: true
+          example: Calibrated to 150 ft-lb max
+
+    UpdateToolRequest:
+      type: object
+      description: All fields optional
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        brand:
+          type: string
+          maxLength: 100
+          nullable: true
+        category:
+          type: string
+          enum:
+            - hand_tools
+            - power_tools
+            - lifting
+            - measuring
+            - diagnostic
+            - consumables
+            - other
+        notes:
+          type: string
+          maxLength: 1000
+          nullable: true
+
+    GarageTool:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Snap-on 1/2 Drive Torque Wrench
+        brand:
+          type: string
+          nullable: true
+          example: Snap-on
+        category:
+          type: string
+          example: hand_tools
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ─────────────────────────────────────────
+    # AI ASSISTANT
+    # ─────────────────────────────────────────
+
+    ChatRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          maxLength: 2000
+          description: The user's question or message
+          example: Why is my car pulling left under braking?
+        conversationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            ID of an existing conversation to continue.
+            Omit to start a new conversation.
+        inspirationImageUrl:
+          type: string
+          nullable: true
+          description: |
+            Cloudinary URL of an inspiration image.
+            When provided, the AI uses vision to analyse
+            the image as part of its response (FR-27, FR-28).
+
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversationId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+          example: Based on your alignment specs and recent coilover install...
+        tokenCount:
+          type: integer
+          description: Tokens used for this message (cost tracking)
+          example: 312
+        createdAt:
+          type: string
+          format: date-time
+
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        carId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          description: Auto-generated summary of the conversation
+          example: Brake pull diagnosis
+        messageCount:
+          type: integer
+          example: 6
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ConversationDetail:
+      allOf:
+        - $ref: '#/components/schemas/Conversation'
+        - type: object
+          properties:
+            messages:
+              type: array
+              items:
+                $ref: '#/components/schemas/ChatMessage'
+
+    # ─────────────────────────────────────────
+    # UPLOADS
+    # ─────────────────────────────────────────
+
+    UploadResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Cloudinary URL of the uploaded file
+          example: https://res.cloudinary.com/wrench/image/upload/v1/cars/photo.jpg
+        publicId:
+          type: string
+          description: Cloudinary public ID for future operations
+          example: wrench/cars/550e8400/photo
+        width:
+          type: integer
+          nullable: true
+          example: 1920
+        height:
+          type: integer
+          nullable: true
+          example: 1080
+        format:
+          type: string
+          example: jpg
+        bytes:
+          type: integer
+          description: File size in bytes
+          example: 2048000
+
+# =================================================
+# PATHS
+# =================================================
+
+paths:
+
+  # ─────────────────────────────────────────────────
+  # AUTH
+  # ─────────────────────────────────────────────────
+
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: |
+        Creates a new user account with email and password.
+
+        On success returns access and refresh tokens so
+        the user is immediately authenticated.
+
+        **Requirements:** FR-01, NFR-13, NFR-16
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created and authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                type: https://api.wrench.ai/errors/email-taken
+                title: Email Already Registered
+                status: 409
+                detail: An account with this email already exists.
+                instance: /v1/auth/register
+                requestId: 01HXYZ123ABC
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login with email and password
+      description: |
+        Authenticates a user and returns access and
+        refresh tokens.
+
+        **Security:** Failed attempts return the same
+        error whether email OR password is wrong.
+        This prevents username enumeration.
+
+        **Requirements:** FR-03, NFR-14, NFR-16
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successfully authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                type: https://api.wrench.ai/errors/invalid-credentials
+                title: Invalid Credentials
+                status: 401
+                detail: The email or password is incorrect.
+                instance: /v1/auth/login
+                requestId: 01HXYZ123ABC
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /auth/login/google:
+    post:
+      tags:
+        - Authentication
+      summary: Login or register with Google OAuth
+      description: |
+        Authenticates via Google OAuth.
+
+        **Flow:**
+        1. Frontend completes Google OAuth and receives
+           an ID token from Google
+        2. Frontend sends the ID token here
+        3. Go API verifies it against Google public keys
+        4. If email exists: log in. If new: create account.
+
+        **Requirements:** FR-02, NFR-25
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idToken
+              properties:
+                idToken:
+                  type: string
+                  description: Google ID token from frontend OAuth flow
+                  example: eyJhbGciOiJSUzI1NiJ9...
+      responses:
+        '200':
+          description: Existing user authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '201':
+          description: New user created and authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid or expired Google ID token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: |
+        Issues a new access token using a valid refresh token.
+
+        **Rotation:** Every call issues a NEW refresh token
+        and invalidates the old one. Single use only.
+
+        **Reuse detection:** If an already-used refresh token
+        is presented, the entire token family is revoked.
+
+        **Requirements:** FR-04, NFR-14
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: New tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Refresh token invalid, expired, or already used
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Logout current session
+      description: |
+        Invalidates the current refresh token.
+
+        The access token remains valid until its 15-minute
+        expiry — documented accepted risk in ADR-005.
+
+        **Requirements:** FR-05
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '204':
+          description: Successfully logged out. No response body.
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/forgot-password:
+    post:
+      tags:
+        - Authentication
+      summary: Request a password reset email
+      description: |
+        Sends a reset link to the email if an account exists.
+
+        **Security:** Always returns 200 regardless of
+        whether the email is registered. Prevents email
+        enumeration attacks.
+
+        **Requirements:** FR-07
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '200':
+          description: Always returned whether or not email exists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: If an account exists for this email, a reset link has been sent.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /auth/reset-password:
+    post:
+      tags:
+        - Authentication
+      summary: Reset password using reset token
+      description: |
+        Resets password using the token received via email.
+
+        On success: password updated, all refresh tokens
+        revoked, user must log in again.
+
+        **Requirements:** FR-08
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password successfully reset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Password reset successfully. Please log in with your new password.
+        '401':
+          description: Reset token invalid or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  # ─────────────────────────────────────────────────
+  # USER PROFILE
+  # ─────────────────────────────────────────────────
+
+  /user/me:
+    get:
+      tags:
+        - User Profile
+      summary: Get the authenticated user's profile
+      description: |
+        Returns the full profile of the currently
+        authenticated user.
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    patch:
+      tags:
+        - User Profile
+      summary: Update profile details
+      description: |
+        Updates displayName or phoneNumber.
+        Email cannot be changed here — requires
+        a separate email verification flow.
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /user/me/password:
+    patch:
+      tags:
+        - User Profile
+      summary: Change password
+      description: |
+        Updates the user's password.
+
+        On success all existing refresh tokens are
+        revoked — all sessions terminated. User must
+        log in again with new password.
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePasswordRequest'
+      responses:
+        '200':
+          description: Password changed. All sessions revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Password updated. Please log in again.
+        '401':
+          description: Current password is incorrect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /user/me/avatar:
+    post:
+      tags:
+        - User Profile
+      summary: Upload a profile avatar
+      description: |
+        Uploads a new avatar image for the user.
+        Replaces any existing avatar.
+        Accepted formats: JPEG, PNG, WebP. Max 5MB.
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Avatar uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /user/me/delete:
+    delete:
+      tags:
+        - User Profile
+      summary: Delete account
+      description: |
+        Permanently deletes the user's account and all
+        associated data (cars, mods, conversations, photos).
+
+        **This action is irreversible.**
+
+        Data deletion complies with NFR-18 (GDPR).
+        All data removed within 30 days of request.
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Account deleted. No response body.
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ─────────────────────────────────────────────────
+  # CARS
+  # ─────────────────────────────────────────────────
+
+  /cars:
+    get:
+      tags:
+        - Cars
+      summary: List all cars in the garage
+      description: |
+        Returns all cars for the authenticated user,
+        ordered by createdAt descending.
+
+        Uses cursor-based pagination — stable under
+        inserts, no COUNT(*) query needed.
+
+        **Requirements:** FR-10, NFR-01, NFR-17
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - in: query
+          name: cursor
+          schema:
+            type: string
+          description: Omit for first page
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of cars
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CarSummary'
+                  pagination:
+                    $ref: '#/components/schemas/CursorPagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+    post:
+      tags:
+        - Cars
+      summary: Add a car to the garage
+      description: |
+        Adds a new car and automatically generates its
+        profile embedding and queues knowledge enrichment.
+
+        **Requirements:** FR-09, FR-31, FR-32, NFR-30
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCarRequest'
+      responses:
+        '201':
+          description: Car created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CarDetail'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /cars/{carId}:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - Cars
+      summary: Get a single car with full details
+      description: |
+        Returns 404 (not 403) if the car belongs to
+        another user — prevents IDOR enumeration.
+
+        Response cached in Redis for 5 minutes.
+
+        **Requirements:** FR-10, NFR-01, NFR-17
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Car details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CarDetail'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    patch:
+      tags:
+        - Cars
+      summary: Update car details
+      description: |
+        Partial update. Only provided fields are changed.
+
+        Regenerates embedding if make, model, year,
+        engine, or usageType changed.
+
+        **Requirements:** FR-09, NFR-17
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCarRequest'
+      responses:
+        '200':
+          description: Car updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CarDetail'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    delete:
+      tags:
+        - Cars
+      summary: Delete a car and all associated data
+      description: |
+        Permanently deletes car and all related data.
+        DB cascade handles child records.
+        Cloudinary cleanup via async job with retry.
+
+        **This action is irreversible.**
+
+        **Requirements:** NFR-17, NFR-18
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Car deleted. No response body.
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ─────────────────────────────────────────────────
+  # MODIFICATIONS
+  # ─────────────────────────────────────────────────
+
+  /cars/{carId}/mods:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - Modifications
+      summary: List all modifications for a car
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+        - in: query
+          name: category
+          schema:
+            type: string
+            enum:
+              - suspension
+              - engine
+              - brakes
+              - exhaust
+              - wheels
+              - exterior
+              - interior
+              - electronics
+              - forced_induction
+              - drivetrain
+              - other
+        - in: query
+          name: isPlanned
+          schema:
+            type: boolean
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            maximum: 50
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of modifications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CarMod'
+                  pagination:
+                    $ref: '#/components/schemas/CursorPagination'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      tags:
+        - Modifications
+      summary: Add a modification to a car
+      description: |
+        Creates a mod record and generates its embedding.
+        AI-generated mods start as unconfirmed.
+
+        **Requirements:** FR-11, FR-33, NFR-17
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateModRequest'
+      responses:
+        '201':
+          description: Modification created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CarMod'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /cars/{carId}/mods/{modId}:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: modId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - Modifications
+      summary: Get a single modification
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Modification detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CarMod'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    patch:
+      tags:
+        - Modifications
+      summary: Update a modification
+      description: |
+        Partial update. Regenerates embedding if name,
+        category, or description changed.
+        Set confirmed: true to verify an AI-generated mod.
+
+        **Requirements:** FR-11, FR-33
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModRequest'
+      responses:
+        '200':
+          description: Modification updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CarMod'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    delete:
+      tags:
+        - Modifications
+      summary: Delete a modification
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Modification deleted. No response body.
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ─────────────────────────────────────────────────
+  # SERVICE RECORDS
+  # ─────────────────────────────────────────────────
+
+  /cars/{carId}/service:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - Service Records
+      summary: List all service records for a car
+      description: |
+        Returns service history ordered by servicedAt
+        descending. Includes aggregate summary.
+
+        **Requirements:** FR-12, NFR-01, NFR-17
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum:
+              - oil_change
+              - tyre_rotation
+              - brake_service
+              - timing_belt
+              - coolant_flush
+              - transmission_service
+              - differential_service
+              - alignment
+              - inspection
+              - other
+        - in: query
+          name: fromMileage
+          schema:
+            type: integer
+        - in: query
+          name: toMileage
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            maximum: 50
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of service records with summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServiceRecord'
+                  pagination:
+                    $ref: '#/components/schemas/CursorPagination'
+                  summary:
+                    $ref: '#/components/schemas/ServiceSummary'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      tags:
+        - Service Records
+      summary: Log a service record
+      description: |
+        Creates a service record and generates its embedding.
+
+        Warns but does not reject if mileage is lower
+        than the most recent record — allows importing
+        historical records out of order.
+
+        **Requirements:** FR-12, NFR-17
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateServiceRequest'
+      responses:
+        '201':
+          description: Service record created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceRecord'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /cars/{carId}/service/{recordId}:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: recordId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - Service Records
+      summary: Get a single service record
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Service record detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceRecord'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    patch:
+      tags:
+        - Service Records
+      summary: Update a service record
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateServiceRequest'
+      responses:
+        '200':
+          description: Service record updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceRecord'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    delete:
+      tags:
+        - Service Records
+      summary: Delete a service record
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Record deleted. No response body.
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ─────────────────────────────────────────────────
+  # BUILD PLANNER
+  # ─────────────────────────────────────────────────
+
+  /cars/{carId}/build:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - Build Planner
+      summary: Get the full build plan for a car
+      description: |
+        Returns all stages with tasks nested inside.
+        Avoids N+1 requests — the build plan is always
+        viewed as a whole in the UI.
+
+        **Requirements:** FR-14, FR-15, FR-16, FR-17
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Full build plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildPlan'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /cars/{carId}/build/stages:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    post:
+      tags:
+        - Build Planner
+      summary: Create a build stage
+      description: |
+        Creates a stage. AI-generated stages start
+        as unconfirmed.
+
+        **Requirements:** FR-14, FR-19, FR-33
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStageRequest'
+      responses:
+        '201':
+          description: Stage created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildStage'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /cars/{carId}/build/stages/reorder:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    patch:
+      tags:
+        - Build Planner
+      summary: Reorder build stages
+      description: |
+        Updates order of all stages in one atomic
+        DB transaction. All stage IDs must be included.
+
+        **Requirements:** FR-14
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - stages
+              properties:
+                stages:
+                  type: array
+                  description: All stage IDs in the desired order
+                  items:
+                    type: object
+                    required:
+                      - id
+                      - order
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      order:
+                        type: integer
+                        minimum: 1
+      responses:
+        '200':
+          description: Stages reordered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildPlan'
+        '400':
+          description: Stage IDs do not match this car's stages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /cars/{carId}/build/stages/{stageId}:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: stageId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    patch:
+      tags:
+        - Build Planner
+      summary: Update a build stage
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStageRequest'
+      responses:
+        '200':
+          description: Stage updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildStage'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    delete:
+      tags:
+        - Build Planner
+      summary: Delete a build stage and all its tasks
+      description: |
+        DB cascade deletes all tasks in this stage.
+        Remaining stages are renumbered in the same
+        transaction.
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Stage deleted. No response body.
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /cars/{carId}/build/stages/{stageId}/tasks:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: stageId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    post:
+      tags:
+        - Build Planner
+      summary: Add a task to a build stage
+      description: |
+        **Requirements:** FR-15, FR-20, FR-33
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildTask'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /cars/{carId}/build/stages/{stageId}/tasks/{taskId}:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: stageId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: taskId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    patch:
+      tags:
+        - Build Planner
+      summary: Update a task
+      description: |
+        Setting status: complete sets completedAt.
+        Setting pending or in_progress clears completedAt.
+        actualCost rolls up to parent stage.
+
+        **Requirements:** FR-16, FR-33
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+      responses:
+        '200':
+          description: Task updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildTask'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    delete:
+      tags:
+        - Build Planner
+      summary: Delete a task
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Task deleted. No response body.
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ─────────────────────────────────────────────────
+  # BUDGET
+  # ─────────────────────────────────────────────────
+
+  /cars/{carId}/budget:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - Budget
+      summary: Get budget summary and entries for a car
+      description: |
+        Returns full budget picture — total spend,
+        breakdown by category, individual entries,
+        and comparison against build plan costs.
+
+        **Requirements:** FR-17, NFR-17
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+        - in: query
+          name: category
+          schema:
+            type: string
+            enum: [parts, labour, tools, consumables, other]
+        - in: query
+          name: fromDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: toDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            maximum: 50
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Budget summary and entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      tags:
+        - Budget
+      summary: Add a budget entry
+      description: |
+        Logs a spend entry not tied to a specific task.
+
+        **Requirements:** FR-17, NFR-17
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBudgetEntryRequest'
+      responses:
+        '201':
+          description: Budget entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetEntry'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /cars/{carId}/budget/{entryId}:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: entryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    patch:
+      tags:
+        - Budget
+      summary: Update a budget entry
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBudgetEntryRequest'
+      responses:
+        '200':
+          description: Entry updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetEntry'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    delete:
+      tags:
+        - Budget
+      summary: Delete a budget entry
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Entry deleted. No response body.
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ─────────────────────────────────────────────────
+  # GARAGE TOOLS
+  # ─────────────────────────────────────────────────
+
+  /tools:
+    get:
+      tags:
+        - Garage Tools
+      summary: List all tools in the user's garage
+      description: |
+        Returns all tools owned by the authenticated user.
+        The AI assistant uses this list to give realistic
+        DIY advice based on what tools are available.
+
+        **Requirements:** FR-18, FR-26
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+        - in: query
+          name: category
+          schema:
+            type: string
+            enum:
+              - hand_tools
+              - power_tools
+              - lifting
+              - measuring
+              - diagnostic
+              - consumables
+              - other
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            maximum: 50
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GarageTool'
+                  pagination:
+                    $ref: '#/components/schemas/CursorPagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      tags:
+        - Garage Tools
+      summary: Add a tool to the garage
+      description: |
+        **Requirements:** FR-18
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateToolRequest'
+      responses:
+        '201':
+          description: Tool added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GarageTool'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /tools/{toolId}:
+    parameters:
+      - in: path
+        name: toolId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    patch:
+      tags:
+        - Garage Tools
+      summary: Update a tool
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateToolRequest'
+      responses:
+        '200':
+          description: Tool updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GarageTool'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    delete:
+      tags:
+        - Garage Tools
+      summary: Remove a tool from the garage
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Tool removed. No response body.
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ─────────────────────────────────────────────────
+  # AI ASSISTANT
+  # ─────────────────────────────────────────────────
+
+  /cars/{carId}/chat:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    post:
+      tags:
+        - AI Assistant
+      summary: Send a message to the AI assistant
+      description: |
+        Sends a message and streams the AI response
+        using Server-Sent Events (SSE).
+
+        **RAG pipeline (automatic):**
+        1. User question is embedded via OpenAI
+        2. pgvector finds most relevant car records
+        3. Car profile always included in context
+        4. Retrieved context injected into Claude prompt
+        5. Response streamed token by token via SSE
+
+        **Tool awareness:**
+        The AI has access to the user's garage tools
+        list and factors this into DIY advice (FR-26).
+
+        **Vision support:**
+        If inspirationImageUrl is provided, the AI
+        analyses the image and can generate a build
+        plan from it (FR-27, FR-28).
+
+        **Fallback:**
+        If Anthropic Claude is unavailable, the system
+        falls back to OpenAI automatically (FR-25).
+
+        **Rate limit:** 20 requests per user per hour
+        (NFR-15). Returns 429 with Retry-After when
+        exceeded.
+
+        **Requirements:** FR-21, FR-22, FR-23, FR-25,
+        FR-26, FR-27, FR-28, NFR-02, NFR-03, NFR-15
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: |
+            SSE stream of AI response tokens.
+
+            Event stream format:
+            ```
+            event: token
+            data: {"token": "Based"}
+
+            event: token
+            data: {"token": " on"}
+
+            event: token
+            data: {"token": " your"}
+
+            event: done
+            data: {"conversationId": "uuid", "messageId": "uuid", "tokenCount": 312}
+
+            event: error
+            data: {"message": "AI provider unavailable. Please try again."}
+            ```
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE token stream
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+        '503':
+          description: |
+            AI provider unavailable and fallback exhausted.
+            Circuit breaker is open. Retry after 30 seconds.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                type: https://api.wrench.ai/errors/ai-unavailable
+                title: AI Assistant Unavailable
+                status: 503
+                detail: The AI assistant is temporarily unavailable. Your car data is safe. Please try again in a few minutes.
+                instance: /v1/cars/550e8400/chat
+                requestId: 01HXYZ123ABC
+
+  /cars/{carId}/conversations:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - AI Assistant
+      summary: List all AI conversations for a car
+      description: |
+        Returns conversation history ordered by
+        updatedAt descending — most recent first.
+
+        **Requirements:** FR-24, NFR-17
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            maximum: 50
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Conversation'
+                  pagination:
+                    $ref: '#/components/schemas/CursorPagination'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /cars/{carId}/conversations/{conversationId}:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: conversationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - AI Assistant
+      summary: Get a conversation with full message history
+      description: |
+        Returns the conversation and all messages
+        in chronological order.
+
+        **Requirements:** FR-24, NFR-17
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Conversation with messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetail'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    delete:
+      tags:
+        - AI Assistant
+      summary: Delete a conversation and all its messages
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Conversation deleted. No response body.
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ─────────────────────────────────────────────────
+  # UPLOADS
+  # ─────────────────────────────────────────────────
+
+  /upload/photo:
+    post:
+      tags:
+        - Uploads
+      summary: Upload a photo
+      description: |
+        Uploads a photo to Cloudinary and returns
+        the URL for use in mod or service records.
+
+        **Accepted formats:** JPEG, PNG, WebP
+        **Max size:** 10MB (NFR-27)
+        **Validation:** MIME type validated server-side,
+        not just file extension.
+
+        **Usage:**
+        1. Upload photo → get back Cloudinary URL
+        2. Include URL when creating or updating
+           a mod, service record, or budget entry
+
+        **Requirements:** FR-28, NFR-04, NFR-27
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - type
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Photo file. Max 10MB.
+                type:
+                  type: string
+                  enum: [mod, service, inspiration, receipt]
+                  description: |
+                    What the photo is for.
+                    Determines the Cloudinary folder
+                    and access rules.
+                carId:
+                  type: string
+                  format: uuid
+                  description: |
+                    Required for mod, service, and
+                    inspiration photos.
+      responses:
+        '201':
+          description: Photo uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '422':
+          description: File too large, wrong format, or missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                type: https://api.wrench.ai/errors/invalid-file
+                title: Invalid File
+                status: 422
+                detail: File must be JPEG, PNG, or WebP and under 10MB.
+                instance: /v1/upload/photo
+                requestId: 01HXYZ123ABC
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /upload/receipt:
+    post:
+      tags:
+        - Uploads
+      summary: Upload a receipt
+      description: |
+        Uploads a receipt document to Cloudinary.
+
+        **Accepted formats:** JPEG, PNG, WebP, PDF
+        **Max size:** 10MB
+
+        **Requirements:** FR-29, NFR-27
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Receipt file. JPEG, PNG, WebP, or PDF. Max 10MB.
+      responses:
+        '201':
+          description: Receipt uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
