@@ -425,6 +425,55 @@ omissions, not oversights:
 
 ---
 
+## Autoscaling trigger
+
+Wrench's AI chat endpoint holds SSE connections
+open for 8-10 seconds per request. Go goroutines
+park during this wait, consuming near-zero CPU,
+but the open connections accumulate in memory and
+against OS file descriptor limits. CPU-based
+autoscaling therefore underestimates load from
+sustained AI traffic.
+
+Scale out when ANY of the following conditions
+are met for more than 2 minutes:
+- Pod memory utilisation > 70% of limit
+- Concurrent active connections > 400 per pod
+- p95 API latency > 500ms (symptom-based trigger)
+
+Metric names (Grafana):
+- container_memory_usage_bytes
+- wrench_http_active_connections (custom OTel gauge)
+- histogram_quantile(0.95, wrench_http_request_duration_seconds)
+
+---
+
+## Graceful shutdown + connection draining
+
+Rolling deployments achieve zero downtime through
+coordination between the pod and Kong:
+
+Pod side (graceful shutdown):
+1. SIGTERM received → health check returns 503
+2. Shutdown() called → idle keep-alive connections
+   closed immediately, active requests continue
+3. 30s timeout → force kill any remaining goroutines
+4. Clean exit → DB connections closed, logs flushed
+
+Kong side (connection draining):
+1. Passive health check detects 503 on real traffic
+   → Pod ejected from upstream pool immediately
+2. Active health check (every 3s) as safety net
+3. Failed requests retried once on a healthy pod
+   (retries: 1, retry_on_status: [503])
+4. Keep-alive connections to ejected pod abandoned
+
+User experience: zero visible errors, at most
+a few milliseconds additional latency on
+requests that hit the transition window.
+
+---
+
 ## References
 
 - Requirements: [requirements.md](./requirements.md)
