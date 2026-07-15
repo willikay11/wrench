@@ -1,130 +1,81 @@
 # Wrench
 
-AI-powered car build research platform that helps automotive enthusiasts research, plan, and track custom car modifications. Wrench uses Claude/Gemini vision analysis and generative AI to suggest parts, manage budgets, and connect builders with experienced mechanics.
+Wrench is an AI-powered project car assistant and build planner.
+It helps enthusiasts manage a digital garage, track modifications
+and service history, plan staged builds, and get car-specific AI
+guidance grounded in their own vehicle data.
 
-## User Personas
+This repository is design-first: the docs capture architecture,
+requirements, ADRs, reliability strategy, and operational runbooks
+for implementation and scaling.
 
-**Enthusiast Builder** — DIY car enthusiast planning a modification; needs curated parts lists, community validation, and sourcing help.
+## What The Product Does
 
-**Casual Researcher** — Car owner curious about "what would it take to do X"; values quick answers without commitment to a full project.
+- Manages garage data: cars, modifications, service records, and budgets.
+- Supports staged build planning with tasks and cost tracking.
+- Provides an AI assistant with RAG so responses use each user car's real history.
+- Handles inspiration image uploads for AI-assisted build planning.
+- Keeps core CRUD workflows available even when AI providers degrade.
 
-**Mechanic Network** — Experienced technicians offering expertise on builds they've seen; connects to projects to validate parts choices and offer labour.
+Primary source: [docs/requirements.md](docs/requirements.md)
 
-## Tech Stack
+## Architecture At A Glance
 
-| Layer | Technology | Why |
-|-------|-----------|-----|
-| Frontend | Next.js 14 (App Router) | React with file-based routing, built-in SSR |
-| Styling | Tailwind CSS | Utility-first, zero-runtime CSS |
-| Backend | FastAPI + Python 3.11+ | Native async, Pydantic validation, rich Python AI ecosystem |
-| Database | Supabase (PostgreSQL 17) | RLS at the DB layer, vector embeddings (pgvector), local dev |
-| Auth | Supabase Auth + OAuth | Google login, session management, user isolation |
-| Storage | Supabase Storage | Image uploads with public bucket policies |
-| AI Providers | Claude Sonnet (prod) / Gemini Flash (dev) | Cost trade-off: free Gemini in dev, production-grade Claude in prod |
-| Package Manager | pnpm | Monorepo workspace support, faster installs |
-| Infrastructure | Docker + Nginx | Local dev environment mirrors production |
+The target architecture described in the docs is:
 
-## Monorepo Structure
+- Web frontend behind CDN.
+- Go API monolith behind Kong API Gateway.
+- PostgreSQL + pgvector with one primary and two read replicas.
+- Redis for cache and per-user AI rate limiting.
+- Cloudinary for media.
+- Anthropic Claude as primary AI provider with OpenAI fallback.
+- OpenTelemetry + Grafana stack for logs, metrics, and traces.
 
-```
-wrench/
-├── apps/
-│   ├── web/            # Next.js 14 frontend
-│   │   ├── src/
-│   │   │   ├── app/
-│   │   │   ├── components/
-│   │   │   └── lib/
-│   │   └── .env.example
-│   └── api/            # FastAPI backend
-│       ├── app/
-│       │   ├── routers/       # builds, parts, advisor, vision
-│       │   ├── services/      # AI integration, vision analysis
-│       │   ├── schemas/       # Pydantic models
-│       │   ├── core/          # config, dependencies, auth
-│       │   └── main.py
-│       ├── tests/
-│       ├── pyproject.toml
-│       └── .env.example
-├── packages/
-│   ├── supabase/        # Migrations, local dev config
-│   │   ├── migrations/  # Schema + RLS policies
-│   │   ├── config.toml  # Supabase CLI configuration
-│   │   └── seed.sql     # Dev data seed
-│   └── shared/          # Shared TypeScript types
-├── infra/
-│   └── docker/          # Production Docker + Nginx
-└── docs/                # Project documentation
-```
+Primary source: [docs/system-design.md](docs/system-design.md)
 
-## Quick Start
+## Reliability, Security, And Ops
 
-See [docs/engineering/setup.md](docs/engineering/setup.md) for detailed setup instructions including prerequisites, environment variables, and troubleshooting.
+- Failure-mode runbooks for database, cache, API pods, gateway, and AI vendors.
+- Defined SLOs, alerting strategy, and error-budget policy.
+- Security design covering auth, threat model, network controls, and rate limiting.
+- Capacity planning from launch assumptions to larger-scale growth.
 
-```bash
-pnpm install
-cp apps/web/.env.example apps/web/.env.local
-cp apps/api/.env.example apps/api/.env
-pnpm dev
-```
+Start here:
 
-## Documentation
+- [docs/failure-modes.md](docs/failure-modes.md)
+- [docs/slos.md](docs/slos.md)
+- [docs/dashboards-and-alerts.md](docs/dashboards-and-alerts.md)
+- [docs/security/security-design.md](docs/security/security-design.md)
+- [docs/capacity-estimation.md](docs/capacity-estimation.md)
 
-- **[Engineering Setup](docs/engineering/setup.md)** — Prerequisites, installation, environment variables
-- **[Architecture Overview](docs/architecture/overview.md)** — System diagram, auth flow, AI abstraction
-- **[Database Schema](docs/architecture/database-schema.md)** — Tables, relationships, RLS policies
-- **[Architecture Decision Records](docs/engineering/adr/)** — Why we chose FastAPI, Supabase, and AI provider abstraction
-- **[Product Decisions](docs/product/decisions.md)** — Conversation-first UX, goals, budget, mechanic connection
-- **[User Journeys](docs/product/user-journeys/)** — Step-by-step flows for each persona
+## Documentation Map
 
-## Apps
+- System overview: [docs/system-design.md](docs/system-design.md)
+- Product and technical requirements: [docs/requirements.md](docs/requirements.md)
+- Database operations and replication: [docs/database-design.md](docs/database-design.md)
+- Schema details: [docs/schema.md](docs/schema.md)
+- Caching and rate-limiting behavior: [docs/caching-strategy.md](docs/caching-strategy.md)
+- Load balancing and traffic routing: [docs/load-balancer-design.md](docs/load-balancer-design.md)
+- Observability architecture: [docs/observability-design.md](docs/observability-design.md)
+- OpenAPI contract: [docs/api/openapi.yaml](docs/api/openapi.yaml)
+- ADRs: [docs/adr](docs/adr)
 
-| App | URL | Stack |
-|-----|-----|-------|
-| Web | http://localhost:3000 | Next.js 14, Tailwind, Supabase |
-| API | http://localhost:8000 | FastAPI, Python 3.11, Anthropic/Gemini |
-| API Docs | http://localhost:8000/docs | Swagger (dev only) |
+## Suggested Reading Order
 
-## Running Locally
+1. [docs/system-design.md](docs/system-design.md)
+2. [docs/requirements.md](docs/requirements.md)
+3. [docs/schema.md](docs/schema.md)
+4. [docs/failure-modes.md](docs/failure-modes.md)
+5. [docs/adr](docs/adr)
 
-### FastAPI Backend
+## Current Repository Layout
 
-```bash
-cd apps/api
-source ../../.venv/bin/activate
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
+- [docs](docs): System design and decision records.
+- [packages/supabase](packages/supabase): Supabase config, migrations, and seed data.
+- [infra/docker](infra/docker): Deployment-oriented Docker and gateway configuration.
 
-### Next.js Frontend
+## Project Status
 
-```bash
-pnpm dev:web
-```
-
-### All Services (Docker)
-
-```bash
-pnpm dev
-```
-
-## Testing
-
-```bash
-pnpm test                          # Both web (Vitest) and API (Pytest)
-pnpm test:web                      # Just Next.js tests
-pnpm test:api                      # Just FastAPI tests
-pytest tests/routers/test_builds.py -v  # Single API test file
-```
-
-## All Commands
-
-```bash
-pnpm dev          # Start all services via Docker
-pnpm dev:web      # Start only Next.js
-pnpm dev:api      # Start only FastAPI
-pnpm lint         # Lint all apps
-pnpm typecheck    # TypeScript check
-pnpm test         # Run all tests
-pnpm db:migrate   # Run DB migrations
-pnpm db:seed      # Seed dev data
-pnpm db:types     # Regenerate TS types from schema
-```
+Wrench has a comprehensive architecture and operations blueprint in place,
+including explicit failure handling and recovery targets. Use the docs as
+the source of truth when implementing or evolving services in this repository.
