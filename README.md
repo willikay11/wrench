@@ -71,8 +71,10 @@ Start here:
 ## Current Repository Layout
 
 - [docs](docs): System design and decision records.
-- [packages/supabase](packages/supabase): Supabase config, migrations, and seed data.
-- [infra/docker](infra/docker): Deployment-oriented Docker and gateway configuration.
+- [apps/web](apps/web): Frontend built using Next JS.
+- [apps/api](apps/api): Backend service API built using GO Chi.
+- [apps/infra](apps/infra): Declarative config for railway, kong...
+- [packages](packages): Shared types & packages
 
 ## Project Status
 
