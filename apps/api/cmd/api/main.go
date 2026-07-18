@@ -23,7 +23,7 @@ func main() {
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		returnCode := http.StatusOK
 		w.WriteHeader(returnCode)
-		if _, err := w.Write([]byte(fmt.Sprintf("version: 0.1.0, status: %d", returnCode))); err != nil {
+		if _, err := fmt.Fprintf(w, "version: 0.1.0, status: %d", returnCode); err != nil {
 			log.Error().Err(err).Msg("Failed to write health response")
 		}
 	})
