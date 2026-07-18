@@ -14,21 +14,16 @@ jobs:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          version: 9
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm build
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm install
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
 
   api:
     name: API — lint, typecheck, test
@@ -37,17 +32,16 @@ jobs:
       run:
         working-directory: apps/api
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
-          python-version: "3.11"
-      - run: pip install uv
-      - run: uv pip install --system -e ".[dev]"
-      - run: ruff check .
-      - run: mypy app
-      - run: pytest tests/
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.6.2
+          working-directory: apps/api
+      - run: go test ./...
+      - run: go build -o bin/api ./cmd/api
         env:
-          SUPABASE_URL: http://localhost:54321
-          SUPABASE_SERVICE_ROLE_KEY: placeholder
-          ANTHROPIC_API_KEY: placeholder
-          INTERNAL_API_SECRET: placeholder
+          PORT: 8080
