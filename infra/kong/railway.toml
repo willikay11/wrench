@@ -1,0 +1,11 @@
+# infra/kong/railway.toml
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 120
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
