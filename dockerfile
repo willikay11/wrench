@@ -1,7 +1,7 @@
 # Dockerfile (repo root)
 
 # Stage 1 — Build
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
@@ -14,9 +14,9 @@ RUN go mod download
 COPY apps/api/ .
 
 # Build binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+RUN CGO_ENABLED=0 GOOS=linux \
     go build -ldflags="-w -s" \
-    -o wrench-api ./cmd/api/main.go
+    -o wrench-api ./cmd/api
 
 # Stage 2 — Run
 FROM gcr.io/distroless/static-debian12
@@ -24,8 +24,8 @@ FROM gcr.io/distroless/static-debian12
 WORKDIR /app
 
 COPY --from=builder /app/wrench-api .
-COPY --from=builder /app/db/migrations ./db/migrations
-COPY --from=builder /go/bin/goose .
+# COPY --from=builder /app/db/migrations ./db/migrations
+# COPY --from=builder /go/bin/goose .
 
 EXPOSE 8080
 
