@@ -10,10 +10,11 @@ ENV KONG_PROXY_ACCESS_LOG=/dev/stdout
 ENV KONG_ADMIN_ACCESS_LOG=/dev/stdout
 ENV KONG_PROXY_ERROR_LOG=/dev/stderr
 ENV KONG_ADMIN_ERROR_LOG=/dev/stderr
+ENV KONG_NGINX_WORKER_PROCESSES=2
 
 RUN kong config parse /kong/declarative/kong.yaml
 
 EXPOSE 8000 8001
 
 # Use Railway's PORT variable for proxy listen
-CMD ["sh", "-c", "KONG_PROXY_LISTEN=0.0.0.0:${PORT:-8000} kong start --vv"]
+CMD ["sh", "-c", "KONG_PROXY_LISTEN=0.0.0.0:${PORT:-8000} kong start"]
