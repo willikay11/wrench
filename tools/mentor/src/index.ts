@@ -42,8 +42,13 @@ async function main(): Promise<void> {
   let env
 
   try {
+    console.log("Heeeere.....")
     config = loadConfig()
     env = loadEnv()
+
+    console.error('DEBUG: env loaded, anthropic key starts with:', env.anthropicKey.substring(0, 10))
+    console.error('DEBUG: linear key starts with:', env.linearKey.substring(0, 10))
+
   } catch (err) {
     console.error(chalk.red(`\n  Error: ${(err as Error).message}\n`))
     process.exit(1)
