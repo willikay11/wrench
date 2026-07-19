@@ -29,6 +29,7 @@ plugins:
       policy: redis
       redis_host: redis.railway.internal
       redis_port: 6379
+      redis_password: $(KONG_REDIS_PASSWORD)
       hide_client_headers: true
       fault_tolerant: true
 
