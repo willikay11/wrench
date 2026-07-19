@@ -30,6 +30,7 @@ plugins:
       redis:
         host: redis.railway.internal
         port: 6379
+        username: default
         password: $(KONG_REDIS_PASSWORD)
       hide_client_headers: true
       fault_tolerant: true
