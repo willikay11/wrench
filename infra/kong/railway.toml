@@ -1,9 +1,10 @@
+# infra/kong/railway.toml
+
 [build]
 builder = "dockerfile"
-dockerfilePath = "dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "kong start"
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
