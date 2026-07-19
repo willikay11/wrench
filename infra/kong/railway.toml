@@ -1,6 +1,6 @@
 [build]
 builder = "dockerfile"
-dockerfilePath = "Dockerfile"
+dockerfilePath = "dockerfile"
 
 [deploy]
 startCommand = "kong start"
