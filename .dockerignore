@@ -1,0 +1,30 @@
+# .dockerignore
+
+# Next.js app — not needed for Go API build
+apps/web/
+apps/web/node_modules/
+apps/web/.next/
+
+# Git
+.git/
+.gitignore
+
+# Docs and packages — not needed in the image
+docs/
+packages/
+
+# Local env files — never in Docker
+.env
+.env.local
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files — not needed at runtime
+**/*_test.go
+**/testdata/
+
+# CI config — not needed in image
+.github/
