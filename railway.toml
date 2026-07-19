@@ -9,4 +9,4 @@ healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
-preDeployCommand = "./goose -dir ./db/migrations postgres $DATABASE_URL up"
+# preDeployCommand = "./goose -dir ./db/migrations postgres $DATABASE_URL up"
