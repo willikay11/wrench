@@ -1,6 +1,8 @@
+# infra/kong/railway.toml
+
 [build]
 builder = "dockerfile"
-dockerfilePath = "dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 healthcheckPath = "/health"
