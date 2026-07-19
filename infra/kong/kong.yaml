@@ -5,7 +5,7 @@ _transform: true
 
 services:
   - name: wrench-api
-    url: http://wrench-api.railway.internal:8080
+    url: http://wrench.railway.internal:8080
     connect_timeout: 10000
     read_timeout: 60000
     write_timeout: 60000
