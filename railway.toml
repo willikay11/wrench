@@ -1,0 +1,12 @@
+# railway.toml (repo root)
+
+[build]
+builder = "dockerfile"
+
+[deploy]
+startCommand = "./wrench-api"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+# preDeployCommand = "./goose -dir ./db/migrations postgres $DATABASE_URL up"
