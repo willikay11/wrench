@@ -63,7 +63,8 @@ function Button({
       aria-busy={isLoading}
       {...props}
     >
-      {asChild ? children : (
+      {asChild ? 
+        children : (
         <>
           {isLoading && <Spinner data-icon="inline-start" className="mr-2" />}
           {children}
