@@ -47,8 +47,6 @@ export function loadConfig(): MentorConfig {
   const root = findRoot()
   const configPath = resolve(root, '.mentor.config.json')
 
-  console.log('DEBUG: Looking for config at', configPath)
-
   if (!existsSync(configPath)) {
     throw new Error(
       'No .mentor.config.json found. Run this from inside the wrench repo.'
