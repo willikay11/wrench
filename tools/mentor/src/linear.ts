@@ -54,7 +54,6 @@ export async function fetchLinearIssue(
   }
 
   const rawText = await res.text()
-  console.error('DEBUG raw response:', rawText.substring(0, 500))
 
   if (!rawText || rawText.trim().length === 0) {
     throw new Error('Linear API returned an empty response.')

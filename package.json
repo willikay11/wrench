@@ -5,12 +5,12 @@
     "dev": "concurrently -n web,api -c cyan,magenta \"npm:dev:web\" \"npm:dev:api\"",
     "dev:web": "npm --prefix apps/web run dev",
     "dev:api": "cd apps/api && go run ./cmd/api",
-
+    "prepare": "husky install",
     "lint": "npm --prefix apps/web run lint && cd apps/api && go vet ./...",
     "test": "npm --prefix apps/web run test && cd apps/api && go test ./..."
-
   },
   "devDependencies": {
+    "husky": "^9.1.7",
     "prettier": "^3.0.0"
   }
 }
