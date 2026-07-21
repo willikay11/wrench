@@ -1,0 +1,40 @@
+{
+  "project": {
+    "name": "Wrench",
+    "repo": "willikay11/wrench",
+    "linearTeam": "WRE",
+    "stack": [
+      "Go (backend API)",
+      "Next.js 14 + TypeScript (frontend)",
+      "PostgreSQL + pgvector (database)",
+      "Redis (cache + rate limiting)",
+      "Cloudinary (media uploads)",
+      "Claude API + OpenAI Embeddings (AI)",
+      "Kong API Gateway",
+      "Railway (deployment)"
+    ]
+  },
+  "review": {
+    "minScoreToCommit": 6,
+    "blockOnBlockers": true,
+    "warnOnWarnings": true,
+    "scoreWeights": {
+      "taskCompletion": 0.30,
+      "codeQuality": 0.25,
+      "security": 0.20,
+      "testing": 0.15,
+      "seniorSignals": 0.10
+    }
+  },
+  "branchPattern": "(?:feature|fix|chore|refactor|test|docs)\\/([A-Z]+-\\d+)",
+  "standards": {
+    "ownership": "All resources must return 404 (not 403) when accessed by wrong user",
+    "monetary": "All monetary values stored as BIGINT cents, never float",
+    "auth": "JWT middleware must validate alg:none rejection explicitly",
+    "logging": "Never log PII — use userId UUID not email in all log lines",
+    "errors": "All error responses must use RFC 7807 Problem Details format",
+    "tests": "Every endpoint must have an IDOR integration test",
+    "cache": "Cache invalidation on write: delete key, never update",
+    "migrations": "All schema changes via goose migrations, never manual SQL"
+  }
+}

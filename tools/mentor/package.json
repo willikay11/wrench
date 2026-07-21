@@ -1,0 +1,30 @@
+{
+  "name": "@wrench/mentor",
+  "version": "1.0.0",
+  "description": "Senior engineer mentor agent for the Wrench project",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "mentor": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "review": "tsx src/index.ts review",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.26.0",
+    "chalk": "^5.3.0",
+    "dotenv": "^16.4.5",
+    "ora": "^8.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.15.0",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
