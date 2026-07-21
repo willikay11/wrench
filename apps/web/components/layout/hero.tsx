@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 
 const Hero = () => {
     return (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 px-4 py-24">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 py-24">
             <div className="flex flex-col space-y-4 md:space-y-6">
                 <h1 className="text-3xl md:text-5xl font-medium text-white max-w-[640px]">
                     Your AI mechanic that knows your car inside and out.

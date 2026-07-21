@@ -7,9 +7,11 @@ export default function MarketingLayout({
   children: React.ReactNode
 }) {
   return (
-    <>
-      <Navbar />
-      <main>{children}</main>
-    </>
+    <div className="grid grid-cols-12">
+      <div className="col-start-2 col-span-10">
+        <Navbar />
+        <main>{children}</main>
+      </div>
+    </div>
   )
 }
