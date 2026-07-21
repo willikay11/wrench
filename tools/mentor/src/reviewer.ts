@@ -117,9 +117,7 @@ export async function runReview(
   const userPrompt = buildUserPrompt(issueContent, diff, stagedFiles, branch)
 
   // Gemini Flash API
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
-
-  console.error('DEBUG systemPrompt:', systemPrompt.substring(0, 500))
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent`
 
   const body = {
     system_instruction: {
@@ -142,7 +140,10 @@ export async function runReview(
   try {
     res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-goog-api-key': apiKey,
+      },
       body: JSON.stringify(body),
     })
   } catch (err) {
@@ -172,8 +173,6 @@ export async function runReview(
   }
 
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-
-  console.error('DEBUG Gemini response:', JSON.stringify(data, null, 2).substring(0, 1000))
 
   if (!text.trim()) {
     throw new Error('Gemini returned an empty response. Check your GEMINI_API_KEY.')
