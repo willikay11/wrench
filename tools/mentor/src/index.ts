@@ -44,6 +44,7 @@ async function main(): Promise<void> {
   try {
     config = loadConfig()
     env = loadEnv()
+
   } catch (err) {
     console.error(chalk.red(`\n  Error: ${(err as Error).message}\n`))
     process.exit(1)

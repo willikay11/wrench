@@ -1,5 +1,6 @@
 interface LinearIssue {
   id: string
+  identifier: string
   title: string
   description: string | null
   state: { name: string }
@@ -16,6 +17,7 @@ export async function fetchLinearIssue(
     query GetIssue($id: String!) {
       issue(id: $id) {
         id
+        identifier
         title
         description
         url
@@ -26,32 +28,63 @@ export async function fetchLinearIssue(
     }
   `
 
-  const res = await fetch('https://api.linear.app/graphql', {
-    method: 'POST',
-    headers: {
-      Authorization: apiKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query, variables: { id: issueId } }),
-  })
-
-  if (!res.ok) {
-    throw new Error(`Linear API error: ${res.status} ${res.statusText}`)
+  let res: Response
+  try {
+    res = await fetch('https://api.linear.app/graphql', {
+      method: 'POST',
+      headers: {
+        Authorization: apiKey,
+        'Content-Type': 'application/json',
+        'apollo-require-preflight': 'true',
+      },
+      body: JSON.stringify({ query, variables: { id: issueId } }),
+    })
+  } catch (err) {
+    throw new Error(
+      `Could not reach Linear API. Check your internet connection.\n${(err as Error).message}`
+    )
   }
 
-  const data = (await res.json()) as {
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(
+      `Linear API returned ${res.status} ${res.statusText}.\n` +
+      `Response: ${body.substring(0, 300)}`
+    )
+  }
+
+  const rawText = await res.text()
+
+  if (!rawText || rawText.trim().length === 0) {
+    throw new Error('Linear API returned an empty response.')
+  }
+
+  let data: {
     data?: { issue?: LinearIssue }
     errors?: { message: string }[]
   }
 
+  try {
+    data = JSON.parse(rawText)
+  } catch {
+    throw new Error(
+      `Linear API returned invalid JSON.\nRaw: ${rawText.substring(0, 300)}`
+    )
+  }
+
   if (data.errors?.length) {
-    throw new Error(`Linear GraphQL error: ${data.errors[0].message}`)
+    throw new Error(
+      `Linear GraphQL error: ${data.errors.map((e) => e.message).join(', ')}`
+    )
   }
 
   if (!data.data?.issue) {
     throw new Error(
       `Issue ${issueId} not found in Linear.\n` +
-      `Check the issue ID and make sure your LINEAR_API_KEY has access.`
+      `Check:\n` +
+      `  1. The issue ID is correct (e.g. WRE-135)\n` +
+      `  2. Your LINEAR_API_KEY has access to this team\n` +
+      `  3. The issue exists in Linear`
     )
   }
 
@@ -62,7 +95,7 @@ export function formatIssueForReview(issue: LinearIssue): string {
   const labels = issue.labels.nodes.map((l) => l.name).join(', ')
 
   return [
-    `TASK: ${issue.id} — ${issue.title}`,
+    `TASK: ${issue.identifier} — ${issue.title}`,
     `Status: ${issue.state.name}`,
     labels ? `Labels: ${labels}` : '',
     issue.assignee ? `Assignee: ${issue.assignee.name}` : '',
@@ -71,6 +104,6 @@ export function formatIssueForReview(issue: LinearIssue): string {
     'DESCRIPTION:',
     issue.description || 'No description provided.',
   ]
-    .filter((line) => line !== null && line !== undefined)
+    .filter(Boolean)
     .join('\n')
 }

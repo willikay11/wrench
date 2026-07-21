@@ -145,12 +145,43 @@ export function getStagedFiles(): string[] {
 
 export function getStagedDiff(): string {
   try {
-    const diff = execSync('git diff --cached --unified=3', {
-      encoding: 'utf-8',
-      maxBuffer: 1024 * 1024 * 5,
-    })
-    // Limit to 8000 chars to stay within Claude context
-    return diff.length > 8000 ? diff.substring(0, 8000) + '\n... (truncated)' : diff
+    // Get full diff but filter to relevant file types only
+    // This keeps the diff focused and within Claude's context window
+    const diff = execSync(
+      'git diff --cached --unified=3 -- ' +
+      '"*.ts" "*.tsx" "*.go" "*.sql" "*.css" "*.json"',
+      {
+        encoding: 'utf-8',
+        maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+      }
+    )
+
+    // Claude's context window can handle ~20000 chars comfortably
+    // beyond that we summarise rather than truncate mid-file
+    if (diff.length <= 20000) return diff
+
+    // If still too large, summarise by showing full diff per file
+    // up to the limit — never cut mid-file
+    const files = diff.split('diff --git')
+    let result = ''
+    let truncatedFiles: string[] = []
+
+    for (const file of files) {
+      if (!file.trim()) continue
+      const chunk = 'diff --git' + file
+      if ((result + chunk).length <= 18000) {
+        result += chunk
+      } else {
+        const fileName = file.match(/a\/(.*?) b\//)?.[1] || 'unknown'
+        truncatedFiles.push(fileName)
+      }
+    }
+
+    if (truncatedFiles.length > 0) {
+      result += `\n\n[TRUNCATED — these files were staged but not shown due to size:\n${truncatedFiles.join('\n')}\nReview them manually or split into smaller commits.]\n`
+    }
+
+    return result
   } catch {
     return ''
   }
