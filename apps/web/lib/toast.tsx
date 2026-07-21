@@ -5,7 +5,7 @@ type Opts = { title: string; description?: string; duration?: number }
 
 function toastSuccess({ title, description, duration }: Opts) {
   return toast.custom((t) => (
-    <div role="success-toast" className="flex w-full items-center border-l-4 border-l-success gap-3 rounded-lg bg-card p-4">
+    <div role="success-toast" className="flex w-full items-center border-l-4 border-l-green-500 gap-3 rounded-lg bg-card p-4">
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium">{title}</p>
         {description && (
@@ -25,7 +25,7 @@ function toastSuccess({ title, description, duration }: Opts) {
 
 function toastError({ title, description, duration }: Opts) {
   return toast.custom((t) => (
-    <div role="error-toast" className="flex w-full items-center gap-3 rounded-lg border-l-4 border-l-destructive bg-card p-4">
+    <div role="error-toast" className="flex w-full items-center gap-3 rounded-lg border-l-4 border-l-red-500 bg-card p-4">
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium">{title}</p>
         {description && (
@@ -45,7 +45,7 @@ function toastError({ title, description, duration }: Opts) {
 
 function toastInfo({ title, description, duration }: Opts) {
   return toast.custom((t) => (
-    <div role="info-toast" className="flex w-full items-center gap-3 rounded-lg border-l-4 border-l-info bg-card p-4">
+    <div role="info-toast" className="flex w-full items-center gap-3 rounded-lg border-l-4 border-l-blue-500 bg-card p-4">
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium">{title}</p>
         {description && (
