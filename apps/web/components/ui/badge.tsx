@@ -16,10 +16,14 @@ const badgeVariants = cva(
         teal: "border border-teal-500 bg-teal-500/20 text-teal-500",
         purple: "border border-purple-500 bg-purple-500/20 text-purple-500",
         gray: "border border-gray-500 bg-gray-500/20 text-gray-500",
+        coral: "border border-coral-500 bg-coral-500/20 text-coral-500",
+        outline: "border border-neutral-800 bg-transparent text-neutral-100",
+        warning: "border border-warning bg-warning/20 text-warning",
       },
       size: {
         sm: "px-2 py-0.5 text-[0.6875rem]",
         md: "px-3 py-0.5 text-[0.8125rem]",
+        lg: "px-4 py-1 text-[0.9375rem]",
       }
     },
     defaultVariants: {
