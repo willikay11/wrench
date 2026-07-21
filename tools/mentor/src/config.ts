@@ -1,0 +1,188 @@
+import { readFileSync, existsSync } from 'fs'
+import { resolve } from 'path'
+import { config as loadDotenv } from 'dotenv'
+import { execSync } from 'child_process'
+
+export interface MentorConfig {
+  project: {
+    name: string
+    repo: string
+    linearTeam: string
+    stack: string[]
+  }
+  review: {
+    minScoreToCommit: number
+    blockOnBlockers: boolean
+    warnOnWarnings: boolean
+    scoreWeights: {
+      taskCompletion: number
+      codeQuality: number
+      security: number
+      testing: number
+      seniorSignals: number
+    }
+  }
+  branchPattern: string
+  standards: Record<string, string>
+}
+
+export interface Env {
+  anthropicKey: string
+  linearKey: string
+  geminiKey: string
+  githubToken?: string
+}
+
+export function findRoot(): string {
+  let dir = process.cwd()
+  for (let i = 0; i < 20; i++) {
+    if (existsSync(resolve(dir, '.mentor.config.json'))) return dir
+    const parent = resolve(dir, '..')
+    if (parent === dir) break
+    dir = parent
+  }
+  return process.cwd()
+}
+
+export function loadConfig(): MentorConfig {
+  const root = findRoot()
+  const configPath = resolve(root, '.mentor.config.json')
+
+  if (!existsSync(configPath)) {
+    throw new Error(
+      'No .mentor.config.json found. Run this from inside the wrench repo.'
+    )
+  }
+
+  return JSON.parse(readFileSync(configPath, 'utf-8')) as MentorConfig
+}
+
+export function loadEnv(): Env {
+  const root = findRoot()
+  const envPath = resolve(root, '.mentor.env')
+  if (existsSync(envPath)) {
+    loadDotenv({ path: envPath })
+  }
+
+  const anthropicKey = process.env.ANTHROPIC_API_KEY
+  const linearKey = process.env.LINEAR_API_KEY
+
+  if (!anthropicKey) {
+    throw new Error(
+      'ANTHROPIC_API_KEY not set.\nCopy .mentor.env.example to .mentor.env and add your key.'
+    )
+  }
+
+  if (!linearKey) {
+    throw new Error(
+      'LINEAR_API_KEY not set.\nCopy .mentor.env.example to .mentor.env and add your key.'
+    )
+  }
+
+  const geminiKey = process.env.GEMINI_API_KEY
+  if (!geminiKey) {
+    throw new Error(
+      'GEMINI_API_KEY not set.\n' +
+      'Get a free key at aistudio.google.com\n' +
+      'Add it to .mentor.env as GEMINI_API_KEY=...'
+    )
+  }
+
+  return {
+    anthropicKey,
+    linearKey,
+    geminiKey,
+    githubToken: process.env.GITHUB_TOKEN,
+  }
+}
+
+export function extractIssueId(
+  branchName: string,
+  pattern: string,
+  team: string
+): string | null {
+  try {
+    const regex = new RegExp(pattern)
+    const match = branchName.match(regex)
+    if (match?.[1]) return match[1].toUpperCase()
+
+    const fallback = new RegExp(`(${team}-\\d+)`, 'i')
+    const fallbackMatch = branchName.match(fallback)
+    if (fallbackMatch?.[1]) return fallbackMatch[1].toUpperCase()
+
+    return null
+  } catch {
+    return null
+  }
+}
+
+export function getCurrentBranch(): string {
+  try {
+    const root = findRoot()
+    const headPath = resolve(root, '.git', 'HEAD')
+    if (existsSync(headPath)) {
+      const head = readFileSync(headPath, 'utf-8').trim()
+      if (head.startsWith('ref: refs/heads/')) {
+        return head.replace('ref: refs/heads/', '')
+      }
+    }
+    return execSync('git branch --show-current', { encoding: 'utf-8' }).trim()
+  } catch {
+    return 'unknown'
+  }
+}
+
+export function getStagedFiles(): string[] {
+  try {
+    const output = execSync('git diff --cached --name-only', {
+      encoding: 'utf-8',
+    }).trim()
+    return output ? output.split('\n').filter(Boolean) : []
+  } catch {
+    return []
+  }
+}
+
+export function getStagedDiff(): string {
+  try {
+    // Get full diff but filter to relevant file types only
+    // This keeps the diff focused and within Claude's context window
+    const diff = execSync(
+      'git diff --cached --unified=3 -- ' +
+      '"*.ts" "*.tsx" "*.go" "*.sql" "*.css" "*.json"',
+      {
+        encoding: 'utf-8',
+        maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+      }
+    )
+
+    // Claude's context window can handle ~20000 chars comfortably
+    // beyond that we summarise rather than truncate mid-file
+    if (diff.length <= 20000) return diff
+
+    // If still too large, summarise by showing full diff per file
+    // up to the limit — never cut mid-file
+    const files = diff.split('diff --git')
+    let result = ''
+    let truncatedFiles: string[] = []
+
+    for (const file of files) {
+      if (!file.trim()) continue
+      const chunk = 'diff --git' + file
+      if ((result + chunk).length <= 18000) {
+        result += chunk
+      } else {
+        const fileName = file.match(/a\/(.*?) b\//)?.[1] || 'unknown'
+        truncatedFiles.push(fileName)
+      }
+    }
+
+    if (truncatedFiles.length > 0) {
+      result += `\n\n[TRUNCATED — these files were staged but not shown due to size:\n${truncatedFiles.join('\n')}\nReview them manually or split into smaller commits.]\n`
+    }
+
+    return result
+  } catch {
+    return ''
+  }
+}
