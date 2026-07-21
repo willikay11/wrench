@@ -12,3 +12,4 @@ dist/
 .DS_Store
 *.log
 .mentor.env
+apps/web/app/playground/page.tsx

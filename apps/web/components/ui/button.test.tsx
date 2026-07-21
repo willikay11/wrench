@@ -59,7 +59,7 @@ describe('Button', () => {
         render(<Button variant="outline">Click me</Button>)
         const buttonElement = screen.getByText(/Click me/i)
         expect(buttonElement).toBeInTheDocument()
-        expect(buttonElement).toHaveClass('border-border')
+        expect(buttonElement).toHaveClass('border')
     })
 
     it('renders the button component with left icon', () => {
