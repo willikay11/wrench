@@ -29,6 +29,7 @@ export interface MentorConfig {
 export interface Env {
   anthropicKey: string
   linearKey: string
+  geminiKey: string
   githubToken?: string
 }
 
@@ -78,9 +79,19 @@ export function loadEnv(): Env {
     )
   }
 
+  const geminiKey = process.env.GEMINI_API_KEY
+  if (!geminiKey) {
+    throw new Error(
+      'GEMINI_API_KEY not set.\n' +
+      'Get a free key at aistudio.google.com\n' +
+      'Add it to .mentor.env as GEMINI_API_KEY=...'
+    )
+  }
+
   return {
     anthropicKey,
     linearKey,
+    geminiKey,
     githubToken: process.env.GITHUB_TOKEN,
   }
 }
