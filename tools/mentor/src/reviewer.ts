@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk'
 import type { MentorConfig } from './config.js'
 
 export interface ReviewScores {
@@ -49,7 +48,9 @@ Score weights:
 - Testing (${config.review.scoreWeights.testing * 100}%): Are there tests? Do they cover edge cases?
 - Senior signals (${config.review.scoreWeights.seniorSignals * 100}%): Error handling, observability, documentation
 
-Respond ONLY with valid JSON. No markdown fences, no preamble, no explanation outside the JSON.`
+IMPORTANT: You MUST respond with ONLY a valid JSON object.
+No explanation before or after. No markdown code fences.
+No \`\`\`json prefix. Just the raw JSON object starting with {`
 }
 
 function buildUserPrompt(
@@ -74,34 +75,34 @@ ${filesSection}
 
 ${diffSection}
 
-Return this exact JSON structure:
+Respond with ONLY this JSON object (no other text, no markdown fences):
 {
-  "overallScore": <1-10>,
-  "verdict": "<one sentence — overall assessment of this commit>",
+  "overallScore": <number 1-10>,
+  "verdict": "<one sentence overall assessment>",
   "scores": {
-    "taskCompletion": <1-10>,
-    "codeQuality": <1-10>,
-    "security": <1-10>,
-    "testing": <1-10>,
-    "seniorSignals": <1-10>
+    "taskCompletion": <number 1-10>,
+    "codeQuality": <number 1-10>,
+    "security": <number 1-10>,
+    "testing": <number 1-10>,
+    "seniorSignals": <number 1-10>
   },
-  "passed": [
-    "<specific thing done well — reference file or code if possible>",
-    "<another>"
-  ],
-  "warnings": [
-    "<something to improve — be specific>",
-    "<another>"
-  ],
-  "blockers": [
-    "<must fix before this can be considered done — reference project standard if violated>"
-  ],
-  "nextSteps": [
-    "<specific actionable thing to do next>",
-    "<another>"
-  ],
-  "seniorTip": "<one senior engineering insight specific to what was just built>"
+  "passed": ["<specific thing done well>"],
+  "warnings": ["<something to improve>"],
+  "blockers": ["<must fix before closing — empty array if none>"],
+  "nextSteps": ["<specific actionable next step>"],
+  "seniorTip": "<one senior engineering insight>"
 }`
+}
+
+function extractJSON(text: string): string {
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start === -1 || end === -1) {
+    throw new Error(
+      `No JSON object found in response.\nRaw response:\n${text}`
+    )
+  }
+  return text.substring(start, end + 1)
 }
 
 export async function runReview(
@@ -112,31 +113,80 @@ export async function runReview(
   stagedFiles: string[],
   branch: string
 ): Promise<ReviewResult> {
-  const client = new Anthropic({ apiKey })
+  const systemPrompt = buildSystemPrompt(config)
+  const userPrompt = buildUserPrompt(issueContent, diff, stagedFiles, branch)
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    system: buildSystemPrompt(config),
-    messages: [
+  // Gemini Flash API
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
+
+  console.error('DEBUG systemPrompt:', systemPrompt.substring(0, 500))
+
+  const body = {
+    system_instruction: {
+      parts: [{ text: systemPrompt }]
+    },
+    contents: [
       {
         role: 'user',
-        content: buildUserPrompt(issueContent, diff, stagedFiles, branch),
-      },
+        parts: [{ text: userPrompt }]
+      }
     ],
-  })
+    generationConfig: {
+      temperature: 0.2,        // low temp for consistent structured output
+      maxOutputTokens: 2048,
+      responseMimeType: 'application/json'  // tell Gemini to return JSON
+    }
+  }
 
-  const text = message.content
-    .filter((block) => block.type === 'text')
-    .map((block) => (block as { type: 'text'; text: string }).text)
-    .join('')
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch (err) {
+    throw new Error(
+      `Could not reach Gemini API. Check your internet connection.\n${(err as Error).message}`
+    )
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(
+      `Gemini API returned ${res.status} ${res.statusText}.\n${text.substring(0, 300)}`
+    )
+  }
+
+  const data = await res.json() as {
+    candidates?: Array<{
+      content?: {
+        parts?: Array<{ text?: string }>
+      }
+    }>
+    error?: { message: string }
+  }
+
+  if (data.error) {
+    throw new Error(`Gemini API error: ${data.error.message}`)
+  }
+
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+
+  console.error('DEBUG Gemini response:', JSON.stringify(data, null, 2).substring(0, 1000))
+
+  if (!text.trim()) {
+    throw new Error('Gemini returned an empty response. Check your GEMINI_API_KEY.')
+  }
 
   try {
-    const clean = text.replace(/```json|```/g, '').trim()
-    return JSON.parse(clean) as ReviewResult
-  } catch {
+    const jsonStr = extractJSON(text)
+    return JSON.parse(jsonStr) as ReviewResult
+  } catch (parseErr) {
     throw new Error(
-      `Claude returned unexpected format.\nRaw response:\n${text}`
+      `Failed to parse Gemini response as JSON.\n` +
+      `Parse error: ${(parseErr as Error).message}\n` +
+      `Raw response:\n${text}`
     )
   }
 }
