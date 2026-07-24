@@ -5,7 +5,7 @@ const Feature = () => {
         <div className="grid grid-cols-12">
             <div className="col-start-2 col-span-10 md:col-start-4 md:col-span-6">
                 <div className="flex flex-col space-y-4 md:space-y-6 items-center my-12 md:my-20">
-                    <p className="uppercase text-sm text-primary">// what wrench does</p>
+                    <p className="font-mono uppercase text-sm text-primary">// what wrench does</p>
 
                     <div className="border-b-[1px] border-zinc-700 w-full pb-6">
                         <p className="text-lg md:text-xl text-white max-w-[640px]">

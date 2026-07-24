@@ -27,11 +27,11 @@ const BrowserWindow = ({ url, className, children }: {
 
 const ForBuilders = () => {
     return (
-        <div className="bg-[#0A0A0A] relative">
+        <div className="bg-[#0A0A0A] relative overflow-x-hidden">
             <CustomGrid>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 h-screen items-center relative">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 min-h-screen items-center relative">
                     <div className="flex flex-col col-span-5 space-y-4 md:space-y-6">
-                        <p className="uppercase text-sm text-primary">// for every car builder</p>
+                        <p className="font-mono uppercase text-sm text-primary">// for every car builder</p>
                         <h1 className="text-3xl md:text-5xl font-semibold text-white max-w-[640px]">
                             You should not need five browser tabs to fix your own car.
                         </h1>
@@ -43,13 +43,13 @@ const ForBuilders = () => {
                             <span className="text-xs text-zinc-500">Free to start. No credit card. No spam.</span>
                         </div>
                     </div>
-                    <div className="flex items-center col-span-7 w-full">
-                        <div className="flex flex-col flex-1 relative">
+                    <div className="flex flex-col items-center col-span-7 w-full [zoom:0.8] sm:[zoom:1] xl:flex-row xl:[zoom:0.9] 2xl:[zoom:1]">
+                        <div className="flex flex-col flex-1 items-center relative">
                             <div className="relative w-[316px] shrink-0 text-center">
-                                <div className="absolute top-[190px] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] z-0 blur-[6px] [background-image:radial-gradient(circle_at_center,rgba(239,68,68,0.06)_0%,transparent_65%)]" />
+                                <div className="absolute top-[190px] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] h-[320px] sm:w-[440px] sm:h-[440px] xl:w-[600px] xl:h-[600px] z-0 blur-[6px] [background-image:radial-gradient(circle_at_center,rgba(239,68,68,0.06)_0%,transparent_65%)]" />
 
                                 <div className="relative z-[1]">
-                                    <div className="text-[#EF4444] text-[13px] tracking-[.06em] uppercase mb-4">The old way</div>
+                                    <div className="font-mono text-[#EF4444] text-[13px] tracking-[.06em] uppercase mb-4">The old way</div>
 
                                     <div className="relative h-[380px]">
                                         {/* handwritten note */}
@@ -100,18 +100,18 @@ const ForBuilders = () => {
                                 </div>
                             </div>
                         </div>
-                        <div className="flex w-12 shrink-0 items-center justify-center relative">
-                            <HugeiconsIcon icon={ArrowRight02Icon} size={32} />
+                        <div className="flex h-20 w-full shrink-0 items-center justify-center relative xl:h-auto xl:w-12">
+                            <HugeiconsIcon icon={ArrowRight02Icon} size={32} className="rotate-90 xl:rotate-0" />
                         </div>
                         <div className="flex flex-col flex-1 items-center relative">
                             <div className="relative w-[300px] shrink-0 text-center">
-                                <div className="absolute top-16 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] h-[560px] z-0 blur-[6px] [background-image:radial-gradient(circle_at_center,rgba(34,197,94,0.08)_0%,transparent_65%)]" />
+                                <div className="absolute top-16 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] sm:w-[420px] sm:h-[420px] xl:w-[560px] xl:h-[560px] z-0 blur-[6px] [background-image:radial-gradient(circle_at_center,rgba(34,197,94,0.08)_0%,transparent_65%)]" />
 
                                 <div className="relative z-[1]">
-                                    <div className="text-[#22C55E] text-[13px] tracking-[.06em] uppercase mb-4">With Wrench</div>
+                                    <div className="font-mono text-[#22C55E] text-[13px] tracking-[.06em] uppercase mb-4">With Wrench</div>
 
                                     <div className="bg-[#141414] border border-[#1E1E1E] rounded-2xl p-4 text-left">
-                                        <div className="text-[#888888] text-[14px] mb-3">2003 Nissan 350Z · VQ35DE · Stage 2</div>
+                                        <div className="font-mono text-[#888888] text-[12px] mb-3">2003 Nissan 350Z · VQ35DE · Stage 2</div>
 
                                         <div className="flex flex-col gap-2 text-[13px]">
                                             <div className="flex items-center gap-2 text-[#DDDDDD]"><span className="text-[#22C55E]">●</span>JWT intake · installed · confirmed</div>

@@ -9,7 +9,7 @@ const AI = () => {
         <div className="grid grid-cols-12">
             <div className="col-start-2 col-span-10 md:col-start-3 md:col-span-8">
                 <div className="flex flex-col space-y-4 md:space-y-12 items-center my-12 md:my-20">
-                    <p className="uppercase text-sm text-primary">// MEET REX</p>
+                    <p className="font-mono uppercase text-sm text-primary">// MEET REX</p>
 
                     <div className="space-y-6 text-center">
                         <p className="text-2xl md:text-5xl text-white font-semibold">It already knows your car.</p>

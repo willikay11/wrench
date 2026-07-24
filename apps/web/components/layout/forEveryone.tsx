@@ -28,11 +28,12 @@ const dotsGridStyle: React.CSSProperties = {
 
 const ForEveryone = () => {
     return (
+        <div className="relative overflow-x-hidden">
         <CustomGrid>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 h-screen items-center">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 min-h-screen items-center">
                 <div style={dotsGridStyle} />
                 <div className="flex flex-col col-span-5 space-y-4 md:space-y-6">
-                    <p className="uppercase text-sm text-primary">// for every car owner</p>
+                    <p className="font-mono uppercase text-sm text-primary">// for every car owner</p>
                     <h1 className="text-3xl md:text-5xl font-semibold text-white max-w-[640px]">
                         Your car's history lives in too many places.
                     </h1>
@@ -45,11 +46,11 @@ const ForEveryone = () => {
                     </div>
                 </div>
                 <div className="flex items-center col-span-7 w-full">
-                    <div className="flex flex-row w-full">
+                    <div className="flex flex-col w-full [zoom:0.8] sm:[zoom:1] xl:flex-row xl:[zoom:0.9] 2xl:[zoom:1]">
                         <div className="flex flex-col flex-1 relative">
-                            <div className="absolute w-[600px] h-[600px] top-[200px] left-1/2 -translate-x-1/2 -translate-y-1/2 blur-[6px] [background-image:radial-gradient(circle_at_center,rgba(239,68,68,0.06)_0%,transparent_65%)]" />
-                            <p className="uppercase text-red-500 text-center mb-6 text-sm">The old way</p>
-                            <div className="relative mt-4 h-[350px]">
+                            <div className="absolute w-[320px] h-[320px] sm:w-[440px] sm:h-[440px] xl:w-[600px] xl:h-[600px] top-[200px] left-1/2 -translate-x-1/2 -translate-y-1/2 blur-[6px] [background-image:radial-gradient(circle_at_center,rgba(239,68,68,0.06)_0%,transparent_65%)]" />
+                            <p className="font-mono uppercase text-red-500 text-center mb-6 text-sm">The old way</p>
+                            <div className="relative mt-4 h-[350px] w-[316px] mx-auto">
                                 <div className={cn(scrapBase, "top-[12px] left-[48px] z-3 w-[260px] -rotate-8 bg-[#EDE6D8] px-3.5 py-4 font-mono text-[14px] leading-[1.5] text-[#2A2A2A]")}>
                                     AUTOXPRESS NAIROBI<br />Engine Oil 5W30..KSh 3,500<br />Labour...........KSh 1,500<br /><b>TOTAL............KSh 5,000</b><br />14/03/25
                                 </div>
@@ -78,18 +79,18 @@ const ForEveryone = () => {
                             </div>
                             <div className="text-[#EF4444] text-sm mt-4">Your car's history. Somewhere in here.</div>
                         </div>
-                        <div className="flex w-12 shrink-0 items-center justify-center relative">
-                            <HugeiconsIcon icon={ArrowRight02Icon} size={32} />
+                        <div className="flex h-20 w-full shrink-0 items-center justify-center relative xl:h-auto xl:w-12">
+                            <HugeiconsIcon icon={ArrowRight02Icon} size={32} className="rotate-90 xl:rotate-0" />
                         </div>
                         <div className="flex flex-col flex-1 items-center relative">
                             <div className="relative flex-shrink-0 w-[300px] text-center">
-                            <div className="absolute top-16 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] h-[560px] blur-[6px] [background-image:radial-gradient(circle_at_center,rgba(34,197,94,0.08)_0%,transparent_65%)]"></div>
+                            <div className="absolute top-16 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] sm:w-[420px] sm:h-[420px] xl:w-[560px] xl:h-[560px] blur-[6px] [background-image:radial-gradient(circle_at_center,rgba(34,197,94,0.08)_0%,transparent_65%)]"></div>
 
                             <div className="relative z-[1]">
-                                <div className="text-[#22C55E] text-[13px] tracking-[.06em] uppercase mb-4">With Wrench</div>
+                                <div className="font-mono text-[#22C55E] text-[13px] tracking-[.06em] uppercase mb-4">With Wrench</div>
 
                                 <div className="bg-[#141414] border border-[#1E1E1E] rounded-2xl p-4 text-left">
-                                <div className="text-[#888888] text-[14px] mb-3">2019 BMW X3 · 132,400 km</div>
+                                <div className="font-mono text-[#888888] text-[12px] mb-3">2019 BMW X3 · 132,400 km</div>
 
                                 <div className="flex flex-col gap-2 text-[13px]">
                                     <div className="flex items-center gap-2 text-[#DDDDDD]"><span className="text-[#22C55E]">●</span>Oil change · 14 Mar 25 · KSh 5,000</div>
@@ -124,6 +125,7 @@ const ForEveryone = () => {
                 </div>
             </div>
         </CustomGrid>
+        </div>
     );
 }
 
