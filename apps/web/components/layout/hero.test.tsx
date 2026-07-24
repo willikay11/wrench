@@ -2,7 +2,7 @@ import { render } from '@testing-library/react'
 import { screen } from '@testing-library/dom'
 import { describe, it, expect } from 'vitest'
 
-import { Hero } from './hero'
+import { Hero } from './forEveryone'
 
 describe('Hero', () => {
     it('renders the hero component', () => {

@@ -1,42 +1,40 @@
 'use client';
 
-import { GarageIcon, WrenchIcon, Layout03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react"
-
 const Feature = () => {
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4">
-            <div className="col-span-1 border-[1px] rounded-md border-zinc-800 p-6 bg-neutral-900">
-                <div className="flex flex-col space-y-4">
-                    <HugeiconsIcon icon={GarageIcon} className="w-8 h-8 text-primary" />
+        <div className="grid grid-cols-12">
+            <div className="col-start-2 col-span-10 md:col-start-4 md:col-span-6">
+                <div className="flex flex-col space-y-4 md:space-y-6 items-center my-12 md:my-20">
+                    <p className="uppercase text-sm text-primary">// what wrench does</p>
 
-                    <h3 className="text-lg font-semibold mb-1">Garage Management</h3>
-                    <p className="text-zinc-500 text-sm">
-                        Every mod, every service record, every photo. Your car's full history in one place.
-                    </p>
+                    <div className="border-b-[1px] border-zinc-700 w-full pb-6">
+                        <p className="text-lg md:text-xl text-white max-w-[640px]">
+                        Every modification, logged.
+                        </p>
+                        <p className="mt-3 text-base md:text-lg text-zinc-500">
+                            The parts, the cost, the date, the photo. Your car's full history, not your memory of it.
+                        </p>
+                    </div>
+
+                    <div className="border-b-[1px] border-zinc-700 w-full pb-6">
+                        <p className="text-lg md:text-xl text-white max-w-[640px]">
+                            Every build stage, tracked.
+                        </p>
+                        <p className="mt-3 text-base md:text-lg text-zinc-500">
+                            Plan the work. Track the costs. Know exactly what is done and what is next.
+                        </p>
+                    </div>
+
+                    <div className="w-full">
+                        <p className="text-lg md:text-xl text-white max-w-[640px]">
+                            Every service record, in one place.
+                        </p>
+                        <p className="mt-3 text-base md:text-lg text-zinc-500">
+                            Oil changes, brake flushes, tyre rotations. Never wonder when something was last done.
+                        </p>
+                    </div>
                 </div>
             </div>
-            <div className="col-span-1 border-[1px] rounded-md border-zinc-800 p-6 bg-neutral-900">
-                <div className="flex flex-col space-y-4">
-                    <HugeiconsIcon icon={WrenchIcon} className="w-8 h-8 text-primary" />
-
-                    <h3 className="text-lg font-semibold mb-1">AI assistant</h3>
-                    <p className="text-zinc-500 text-sm">
-                        Ask anything. Get answers that know your exact build, not generic advice.
-                    </p>
-                </div>
-            </div>
-            <div className="col-span-1 border-[1px] rounded-md border-zinc-800 p-6 bg-neutral-900">
-                <div className="flex flex-col space-y-4">
-                    <HugeiconsIcon icon={Layout03Icon} className="w-8 h-8 text-primary" />
-
-                    <h3 className="text-lg font-semibold mb-1">Build planner</h3>
-                    <p className="text-zinc-500 text-sm">
-                        Plan stages, track costs, hit your budget. Know exactly where your build is at.
-                    </p>
-                </div>
-            </div>
-
         </div>
     );
 }

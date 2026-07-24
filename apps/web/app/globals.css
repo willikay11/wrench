@@ -30,6 +30,30 @@
   /* Typography */
   --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
+
+  /* Animations */
+  --animate-ring-pulse: wr-ring-pulse 4s ease-in-out infinite;
+  --animate-eye-scan: wr-eye-scan 3s ease-in-out infinite;
+
+  @keyframes wr-eye-scan {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    50% {
+      transform: translateX(3px);
+    }
+  }
+
+  @keyframes wr-ring-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 50px rgba(232, 105, 60, 0.35);
+    }
+    50% {
+      box-shadow: 0 0 65px rgba(232, 105, 60, 0.55);
+    }
+  }
 }
 
 @theme inline {

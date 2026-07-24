@@ -25,7 +25,7 @@ function Input({ className, type, label, leftIcon, rightIcon, helperText, error,
           data-slot="input"
           aria-invalid={error ? true : undefined}
           className={cn(
-            "h-12 md:h-10 w-full min-w-0 rounded-md border border-zinc-800 bg-neutral-900 px-2 py-0.5 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-xs/relaxed file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-red-500 aria-invalid:ring-2 aria-invalid:ring-red-500/20 md:text-xs/relaxed dark:bg-input/30 dark:aria-invalid:border-red-500 dark:aria-invalid:ring-red-500/40",
+            "h-12 md:h-10 w-full min-w-0 rounded-md border border-zinc-800 bg-neutral-900 px-2 py-0.5 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-xs/relaxed file:font-medium file:text-foreground placeholder:text-neutral-600 focus-visible:border-ring focus-visible:ring-ring/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-red-500 aria-invalid:ring-2 aria-invalid:ring-red-500/20 md:text-xs/relaxed dark:bg-input/30 dark:aria-invalid:border-red-500 dark:aria-invalid:ring-red-500/40",
             leftIcon && "pl-8",
             rightIcon && "pr-8",
             className
