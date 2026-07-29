@@ -5,6 +5,7 @@ import { CustomGrid } from "@/components/layout/customGrid";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowRight02Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
+import { JoinWaitlistButton } from "./joinWailtListButton";
 
 /** Chrome shared by the mock browser windows in the "old way" collage. */
 const windowBase = "absolute overflow-hidden rounded-lg border border-[#2A2A2A] bg-[#1C1C1C] text-[12px] leading-[1.5] text-[#CCCCCC]";
@@ -39,7 +40,7 @@ const ForBuilders = () => {
                             The forum thread from 2019. The YouTube video that skips the part you need. Wrench gives you an AI crew chief who already knows your specific build.
                         </p>
                         <div className="flex flex-col gap-2">
-                            <Button variant="primary" className="font-semibold w-fit">Join the Waitlist</Button>
+                            <JoinWaitlistButton className="w-full md:w-fit" />
                             <span className="text-xs text-zinc-500">Free to start. No credit card. No spam.</span>
                         </div>
                     </div>

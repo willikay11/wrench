@@ -7,6 +7,7 @@ import { Card, CardContent, CardFooter, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
 import { Rex } from "../ui/rex";
 import { useState, useEffect } from "react";
+import { JoinWaitlistButton } from "./joinWailtListButton";
 
 const qa = [
     {
@@ -55,7 +56,7 @@ const Chat = () => {
     }, [question]);
 
     return (
-        <div className="grid grid-cols-12">
+        <div id="try" className="grid grid-cols-12">
             <div className="col-start-2 col-span-10 md:col-start-3 md:col-span-8">
                 <div className="flex flex-col space-y-4 md:space-y-12 items-center my-12 md:my-20">
                     <p className="font-mono uppercase text-sm text-primary">// TRY IT NOW</p>
@@ -113,9 +114,7 @@ const Chat = () => {
                                     {showJoinWaitlist && (
                                         <div className="rounded-md border border-zinc-700 p-4 mt-4 bg-[#0A0A0A]">
                                             <p className="text-xs text-zinc-500 text-center">You've seen what Rex can do with your car's context. Join the waitlist to add your own car and get answers that know your actual build.</p>
-                                            <Button variant="primary" className="mt-4 w-full">
-                                                Join the waitlist
-                                            </Button>
+                                            <JoinWaitlistButton className="mt-4 w-full" />
                                         </div>
                                     )}
                                 </div>

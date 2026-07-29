@@ -5,6 +5,7 @@ import { CustomGrid } from "@/components/layout/customGrid";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowRight02Icon, ArrowUpRight02FreeIcons } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
+import { JoinWaitlistButton } from "./joinWailtListButton";
 
 /** Shared look for the scattered paper scraps in the "old way" collage. */
 const scrapBase = "absolute rounded-[2px] shadow-[0_6px_10px_rgba(0,0,0,0.4)]";
@@ -41,7 +42,7 @@ const ForEveryone = () => {
                         The service receipt in the glovebox. The mileage scribbled in your phone notes. The reminder you set and ignored. Wrench puts your car's full history in one place.
                     </p>
                     <div className="flex flex-col gap-2">
-                        <Button variant="primary" className="font-semibold w-fit">Join the Waitlist</Button>
+                        <JoinWaitlistButton/>
                         <span className="text-xs text-zinc-700">Free to start. No credit card. No spam.</span>
                     </div>
                 </div>
