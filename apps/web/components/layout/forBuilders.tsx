@@ -27,10 +27,12 @@ const BrowserWindow = ({ url, className, children }: {
 );
 
 const ForBuilders = () => {
+    // Fills the panel it sits in, with content-center keeping the content
+    // itself vertically centred.
     return (
-        <div className="bg-[#0A0A0A] relative overflow-x-hidden">
+        <div className="bg-[#0A0A0A] relative grid w-full content-center overflow-x-hidden hero-slides:h-full">
             <CustomGrid>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 min-h-screen items-center relative">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 items-center relative">
                     <div className="flex flex-col col-span-5 space-y-4 md:space-y-6">
                         <p className="font-mono uppercase text-sm text-primary">// for every car builder</p>
                         <h1 className="text-3xl md:text-5xl font-semibold text-white max-w-[640px]">
