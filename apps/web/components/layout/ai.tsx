@@ -18,7 +18,7 @@ const AI = () => {
                         </p>
                     </div>
 
-                    <div className="w-full space-y-3">
+                    <div className="w-full max-w-4xl space-y-3">
                         <div className="rounded-md border-[1px] border-zinc-700 w-full p-32 items-center">
                             <Rex />
                         </div>

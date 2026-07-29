@@ -68,7 +68,7 @@ const Chat = () => {
                     </div>
 
 
-                    <Card className="w-full bg-[#0d0d0d] space-y-0">
+                    <Card className="w-full max-w-4xl bg-[#0d0d0d] space-y-0">
                         <CardTitle className="px-6 py-4 border-b-[1px] border-zinc-700 space-y-1">
                             <p className="text-neutral-600 text-sm">Demo Car</p>
                             <p className="text-white text-xs md:text-sm">2003 Nissan 350Z · 87,000 km · Daily driven. Track days on weekends.</p>
