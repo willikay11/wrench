@@ -37,6 +37,28 @@ export const metadata: Metadata = {
     ],
   },
   manifest: "/site.webmanifest",
+  openGraph: {
+    title: "Wrench",
+    description: "Wrench is a car modification tracking and planning tool that helps you keep track of your car's modifications, plan future modifications, and get AI advice on your specific car.",
+    url: "https://wrench.it.com",
+    siteName: "Wrench",
+    images: [
+      {
+        url: "https://wrench.it.com/og.png",
+        width: 1200,
+        height: 630,
+        alt: "Wrench",
+      },
+    ],
+    locale: "en-US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Wrench",
+    description: "Wrench is a car modification tracking and planning tool that helps you keep track of your car's modifications, plan future modifications, and get AI advice on your specific car.",
+    images: ["https://wrench.it.com/og.png"],
+  },
 };
 
 export default function RootLayout({
