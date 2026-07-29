@@ -2,7 +2,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 
 import { Button } from "../ui/button"
 import { Rex } from "../ui/rex"
-import { ArrowRight01FreeIcons, ArrowRight02Icon } from "@hugeicons/core-free-icons"
+import { ArrowRight02Icon } from "@hugeicons/core-free-icons"
 
 const AI = () => {
     return (

@@ -3,6 +3,7 @@ import { ForBuilders } from "@/components/layout/forBuilders";
 import { Feature } from "@/components/layout/feature";
 import { AI } from "@/components/layout/ai";
 import { Waitlist } from "@/components/layout/waitlist";
+import { Chat } from "@/components/layout/chat";
 
 export default function Home() {
   return (
@@ -11,6 +12,7 @@ export default function Home() {
         <ForBuilders />
         <Feature />
         <AI />
+        <Chat />
         <Waitlist />
     </>
   );
