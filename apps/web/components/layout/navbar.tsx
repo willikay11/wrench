@@ -3,12 +3,18 @@
 import { CustomGrid } from "@/components/layout/customGrid";
 import Link from "next/link";
 import { JoinWaitlistButton } from "./joinWailtListButton";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Configuration01Icon } from "@hugeicons/core-free-icons";
 
 const Navbar = () => {
     return (
         <CustomGrid>
             <nav className="h-13 md:h-16 flex items-center justify-between gap-4 bg-zinc-950 scroll:border-b scroll:border border-zinc-900 top-0 z-50 sticky">
-                <div className="flex items-center justify-center text-primary">Wrench</div>
+                <Link href="/" className="flex flex-row items-center justify-center gap-2">
+                    <HugeiconsIcon icon={Configuration01Icon} className="text-primary" />
+                    <div className="flex items-center justify-center text-primary">Wrench</div>
+                </Link>
+            
                 <div className="hidden md:flex items-center justify-center gap-4">
                     <Link href="#features" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
                         What it does
