@@ -77,7 +77,7 @@ const ForEveryone = () => {
                                     ask mwangi about the noise
                                 </div>
                             </div>
-                            <div className="text-[#EF4444] text-sm mt-4">Your car's history. Somewhere in here.</div>
+                            <div className="text-[#EF4444] text-sm mt-4 text-center">Your car's history. Somewhere in here.</div>
                         </div>
                         <div className="flex h-20 w-full shrink-0 items-center justify-center relative xl:h-auto xl:w-12">
                             <HugeiconsIcon icon={ArrowRight02Icon} size={32} className="rotate-90 xl:rotate-0" />
