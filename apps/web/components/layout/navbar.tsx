@@ -1,8 +1,8 @@
 'use client';
 
-import { Button } from "@/components/ui/button";
 import { CustomGrid } from "@/components/layout/customGrid";
 import Link from "next/link";
+import { JoinWaitlistButton } from "./joinWailtListButton";
 
 const Navbar = () => {
     return (
@@ -11,19 +11,17 @@ const Navbar = () => {
                 <div className="flex items-center justify-center text-primary">Wrench</div>
                 <div className="hidden md:flex items-center justify-center gap-4">
                     <Link href="#features" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
-                        Features
+                        What it does
                     </Link>
-                    <Link href="#assistant" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
-                        AI Assistant
+                    <Link href="#rex" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
+                        Meet Rex
                     </Link>
-                    <Link href="#contact" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
-                        App
+                    <Link href="#try" className="text-sm text-text-secondary hover:text-text-primary transition-colors">
+                        Try it
                     </Link>
                 </div>
                 <div className="flex items-center justify-center gap-4">
-                    <Button variant="primary" className="font-semibold">
-                        Join the Waitlist
-                    </Button>
+                    <JoinWaitlistButton />
                 </div>
             </nav>
         </CustomGrid>

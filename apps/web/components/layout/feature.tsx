@@ -2,7 +2,7 @@
 
 const Feature = () => {
     return (
-        <div className="grid grid-cols-12">
+        <div id="features" className="grid grid-cols-12">
             <div className="col-start-2 col-span-10 md:col-start-4 md:col-span-6">
                 <div className="flex flex-col space-y-4 md:space-y-6 items-center my-12 md:my-20">
                     <p className="font-mono uppercase text-sm text-primary">// what wrench does</p>

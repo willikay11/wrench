@@ -3,10 +3,11 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { Button } from "../ui/button"
 import { Rex } from "../ui/rex"
 import { ArrowRight02Icon } from "@hugeicons/core-free-icons"
+import Link from "next/link"
 
 const AI = () => {
     return (
-        <div className="grid grid-cols-12">
+        <div id="rex" className="grid grid-cols-12">
             <div className="col-start-2 col-span-10 md:col-start-3 md:col-span-8">
                 <div className="flex flex-col space-y-4 md:space-y-12 items-center my-12 md:my-20">
                     <p className="font-mono uppercase text-sm text-primary">// MEET REX</p>
@@ -32,10 +33,12 @@ const AI = () => {
                     </div>
 
                     <div className="border-t-[1px] border-primary px-16 items-center">
-                        <Button variant="link" className="font-semibold w-fit mt-8">
-                            See what Rex sees
-                            <HugeiconsIcon icon={ArrowRight02Icon} size={16} className="ml-2" />
-                        </Button>
+                        <Link href="#try">
+                            <Button variant="link" className="font-semibold w-fit mt-8">
+                                See what Rex sees
+                                <HugeiconsIcon icon={ArrowRight02Icon} size={16} className="ml-2" />
+                            </Button>
+                        </Link>
                         <p className="text-xs text-zinc-700 font-semibold text-center">Early access. Limited availability.</p>
                     </div>
                 </div>
