@@ -21,6 +21,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Wrench",
   description: "Wrench is a car modification tracking and planning tool that helps you keep track of your car's modifications, plan future modifications, and get AI advice on your specific car.",
+  metadataBase: new URL("https://wrench.it.com"),
   icons: {
     apple: "/apple-touch-icon.png",
     icon: [
@@ -44,20 +45,20 @@ export const metadata: Metadata = {
     siteName: "Wrench",
     images: [
       {
-        url: "https://wrench.it.com/og.png",
+        url: "/api/og",
         width: 1200,
         height: 630,
         alt: "Wrench",
       },
     ],
-    locale: "en-US",
+    locale: "en_US",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "Wrench",
     description: "Wrench is a car modification tracking and planning tool that helps you keep track of your car's modifications, plan future modifications, and get AI advice on your specific car.",
-    images: ["https://wrench.it.com/og.png"],
+    images: ["/api/og"],
   },
 };
 
