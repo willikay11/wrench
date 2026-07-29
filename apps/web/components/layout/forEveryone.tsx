@@ -28,10 +28,12 @@ const dotsGridStyle: React.CSSProperties = {
 };
 
 const ForEveryone = () => {
+    // Fills the panel so the dot grid behind it still reaches the navbar;
+    // content-center keeps the content itself vertically centred.
     return (
-        <div className="relative overflow-x-hidden">
+        <div className="relative grid w-full content-center overflow-x-hidden hero-slides:h-full">
         <CustomGrid>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 min-h-screen items-center">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 items-center">
                 <div style={dotsGridStyle} />
                 <div className="flex flex-col col-span-5 space-y-4 md:space-y-6">
                     <p className="font-mono uppercase text-sm text-primary">// for every car owner</p>
