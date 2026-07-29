@@ -10,12 +10,12 @@ import { useState, useEffect } from "react";
 
 const qa = [
     {
-        question: "Why is my 350Z misfiring at boost?",
-        answer: "It could be due to a variety of reasons, such as ignition issues, fuel delivery problems, or vacuum leaks."
+        question: "When's my next service due?",
+        answer: "Your next service is due at 90,000 km or in 2 months, whichever comes first. Your last service was on March 15th, 2026, at 84,000 km. What needs to be done is an oil change, air filter replacement, cabin filter replacement and spark plug change, along with a general inspection of the brakes and suspension components."
     },
     {
         question: "What should I upgrade next given my current mods?",
-        answer: "Given your current mods, you might consider upgrading your exhaust system or tuning your ECU for better performance."
+        answer: "With BC Racing coilovers and a JWT intake already in, your next highest-value upgrade is a header and exhaust to unlock the intake's gains, followed by a tune to correct fueling. Suspension and intake alone are underutilized without matching exhaust flow."
     }
 ]
 const Chat = () => {
@@ -71,7 +71,7 @@ const Chat = () => {
                     <Card className="w-full bg-[#0d0d0d] space-y-0">
                         <CardTitle className="px-6 py-4 border-b-[1px] border-zinc-700 space-y-1">
                             <p className="text-neutral-600 text-sm">Demo Car</p>
-                            <p className="text-white text-xs md:text-sm">2003 Nissan 350Z · VQ35DE · BC Racing coilovers · JWT intake · 87,000 miles</p>
+                            <p className="text-white text-xs md:text-sm">2003 Nissan 350Z · 87,000 km · Daily driven. Track days on weekends.</p>
                         </CardTitle>
                         <CardContent className="bg-[#111111] p-4 space-y-4 min-h-[200px] max-h-[400px] overflow-y-auto">
                             {!question ? (
