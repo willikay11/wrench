@@ -16,14 +16,15 @@ func NewService(waitListRepo ports.WaitlistRepository) *service {
 }
 
 func (s *service) JoinWaitlist(email string) (domain.Waitlist, error) {
-	wailist := domain.Waitlist{
+	waitlist := domain.Waitlist{
 		Email: email,
 	}
 
-	err := s.waitListRepo.Save(&wailist)
+	err := s.waitListRepo.Save(&waitlist)
 
 	if err != nil {
 		return domain.Waitlist{}, err
 	}
-	return wailist, nil
+
+	return waitlist, nil
 }
