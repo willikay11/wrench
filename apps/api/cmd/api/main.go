@@ -17,7 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/willikay11/wrench/api/internal/config"
-	// "github.com/willikay11/wrench/api/internal/handler"
+	"github.com/willikay11/wrench/api/internal/database"
 )
 
 func main() {
@@ -28,6 +28,15 @@ func main() {
 	// Fail-fast config loading
 	// If any required env var is missing → os.Exit(1)
 	cfg, err := config.Load()
+	startUpCtx, cancelStartUpCtx := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelStartUpCtx()
+
+	pool, errPostgres := database.NewPostgres(startUpCtx, cfg.DatabaseURL)
+	if errPostgres != nil {
+		log.Fatal().Err(errPostgres).Msg("Failed to connect to Postgres")
+	}
+	defer pool.Close()
+
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to load config")
 	}
@@ -48,7 +57,7 @@ func main() {
 	})
 
 	// API routes
-	// r.Mount("/v1", handler.NewRouter(cfg))
+	// r.Mount("/v1/waitlist", h.JoinWaitlist)
 
 	// Server with timeouts
 	srv := &http.Server{
