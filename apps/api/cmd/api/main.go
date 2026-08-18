@@ -13,14 +13,20 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/willikay11/wrench/api/internal/config"
+	waitlistsvc "github.com/willikay11/wrench/api/internal/core/services/waitlist"
 	"github.com/willikay11/wrench/api/internal/database"
+	waitlisthttp "github.com/willikay11/wrench/api/internal/handler/waitlist"
+	waitlistrepo "github.com/willikay11/wrench/api/internal/repositories/waitlist"
 )
 
 func main() {
+	_ = godotenv.Load()
+
 	// Structured logging
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.With().Caller().Logger()
@@ -28,18 +34,28 @@ func main() {
 	// Fail-fast config loading
 	// If any required env var is missing → os.Exit(1)
 	cfg, err := config.Load()
-	startUpCtx, cancelStartUpCtx := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancelStartUpCtx()
-
-	pool, errPostgres := database.NewPostgres(startUpCtx, cfg.DatabaseURL)
-	if errPostgres != nil {
-		log.Fatal().Err(errPostgres).Msg("Failed to connect to Postgres")
-	}
-	defer pool.Close()
 
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to load config")
 	}
+
+	startUpCtx, cancelStartUpCtx := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelStartUpCtx()
+
+	pool, err := database.NewPostgres(startUpCtx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to Postgres")
+	}
+	defer pool.Close()
+
+	// Repositories
+	waitlistRepo := waitlistrepo.NewPostgresRepository(pool)
+
+	// Services
+	waitlistSvc := waitlistsvc.NewService(waitlistRepo)
+
+	// Handlers
+	waitlistHandler := waitlisthttp.NewHTTPHandler(waitlistSvc)
 
 	// Router
 	r := chi.NewRouter()
@@ -57,7 +73,7 @@ func main() {
 	})
 
 	// API routes
-	// r.Mount("/v1/waitlist", h.JoinWaitlist)
+	r.Post("/v1/waitlist", waitlistHandler.JoinWaitlist)
 
 	// Server with timeouts
 	srv := &http.Server{
