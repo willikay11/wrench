@@ -8,3 +8,5 @@ type Waitlist struct {
 }
 
 var ErrInvalidEmail = errors.New("invalid email")
+var WelcomEmailSubject = "Welcome to the waitlist"
+var WelcomEmailBody = "Thank you for joining the waitlist."

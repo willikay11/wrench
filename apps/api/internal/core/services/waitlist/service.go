@@ -11,11 +11,15 @@ import (
 
 type service struct {
 	waitListRepo ports.WaitlistRepository
+	emailQueue   ports.EmailQueue
+	txManager    ports.TxManager
 }
 
-func NewService(waitListRepo ports.WaitlistRepository) *service {
+func NewService(waitListRepo ports.WaitlistRepository, emailQueue ports.EmailQueue, txManager ports.TxManager) *service {
 	return &service{
 		waitListRepo: waitListRepo,
+		emailQueue:   emailQueue,
+		txManager:    txManager,
 	}
 }
 
@@ -30,7 +34,12 @@ func (s *service) JoinWaitlist(ctx context.Context, email string) (domain.Waitli
 		Email: strings.ToLower(address.Address),
 	}
 
-	err := s.waitListRepo.Save(ctx, &waitlist)
+	err := s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
+		if err := s.waitListRepo.Save(ctx, &waitlist); err != nil {
+			return err
+		}
+		return s.emailQueue.EnqueueEmail(ctx, waitlist.Email, domain.WelcomEmailSubject, domain.WelcomEmailBody)
+	})
 
 	if err != nil {
 		return domain.Waitlist{}, err

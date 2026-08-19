@@ -9,9 +9,31 @@ import (
 	"github.com/willikay11/wrench/api/internal/core/services/waitlist"
 )
 
+type mockTxManager struct{}
+
+func (m *mockTxManager) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	return fn(ctx)
+}
+
 type mockWaitlistRepository struct {
 	savedWaitlist *domain.Waitlist
 	saveErr       error
+}
+
+type mockEmailQueue struct {
+	enqueueEmailCalled  bool
+	enqueueEmailTo      string
+	enqueueEmailSubject string
+	enqueueEmailBody    string
+	enqueueEmailErr     error
+}
+
+func (m *mockEmailQueue) EnqueueEmail(ctx context.Context, to string, subject string, body string) error {
+	m.enqueueEmailCalled = true
+	m.enqueueEmailTo = to
+	m.enqueueEmailSubject = subject
+	m.enqueueEmailBody = body
+	return m.enqueueEmailErr
 }
 
 func (m *mockWaitlistRepository) Save(ctx context.Context, w *domain.Waitlist) error {
@@ -42,7 +64,9 @@ func TestJoinWaitlist(t *testing.T) {
 
 		for _, tc := range tests {
 			mockRepo := &mockWaitlistRepository{}
-			service := waitlist.NewService(mockRepo)
+			mockEmailQueue := &mockEmailQueue{}
+			mockTxManager := &mockTxManager{}
+			service := waitlist.NewService(mockRepo, mockEmailQueue, mockTxManager)
 
 			got, err := service.JoinWaitlist(context.Background(), tc.email)
 

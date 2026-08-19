@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/willikay11/wrench/api/internal/core/domain"
+	"github.com/willikay11/wrench/api/internal/repositories/transaction"
 )
 
 // postgresRepo is the Postgres-backed implementation of
@@ -36,7 +37,9 @@ func (r *postgresRepo) Save(ctx context.Context, waitlist *domain.Waitlist) erro
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	err := r.db.QueryRow(ctx, saveQuery, waitlist.Email).Scan(&waitlist.ID)
+	// Resolve per call: joins the caller's transaction when there is one,
+	// otherwise runs standalone on the pool.
+	err := transaction.From(ctx, r.db).QueryRow(ctx, saveQuery, waitlist.Email).Scan(&waitlist.ID)
 	if err != nil {
 		return fmt.Errorf("save waitlist entry: %w", err)
 	}

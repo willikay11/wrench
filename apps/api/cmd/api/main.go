@@ -14,7 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
-	"github.com/resend/resend-go/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
@@ -22,7 +21,8 @@ import (
 	waitlistsvc "github.com/willikay11/wrench/api/internal/core/services/waitlist"
 	"github.com/willikay11/wrench/api/internal/database"
 	waitlisthttp "github.com/willikay11/wrench/api/internal/handler/waitlist"
-	resendNotifier "github.com/willikay11/wrench/api/internal/repositories/notifier"
+	transactionalOutboxQueue "github.com/willikay11/wrench/api/internal/repositories/queue"
+	transactionManager "github.com/willikay11/wrench/api/internal/repositories/transaction"
 	waitlistrepo "github.com/willikay11/wrench/api/internal/repositories/waitlist"
 )
 
@@ -51,14 +51,15 @@ func main() {
 	defer pool.Close()
 
 	// Resend client
-	resendClient := resend.NewClient(cfg.ResendAPIKey)
+	// resendClient := resend.NewClient(cfg.ResendAPIKey)
 
 	// Repositories
 	waitlistRepo := waitlistrepo.NewPostgresRepository(pool)
-	resendNotifier := resendNotifier.NewResendNotifier(resendClient, cfg.FromEmail)
-
+	// resendNotifier := resendNotifier.NewResendNotifier(resendClient, cfg.FromEmail)
+	transactionalOutboxQueue := transactionalOutboxQueue.NewTransactionalOutboxQueue(pool)
+	txManager := transactionManager.NewTxManager(pool)
 	// Services
-	waitlistSvc := waitlistsvc.NewService(waitlistRepo)
+	waitlistSvc := waitlistsvc.NewService(waitlistRepo, transactionalOutboxQueue, txManager)
 
 	// Handlers
 	waitlistHandler := waitlisthttp.NewHTTPHandler(waitlistSvc)
