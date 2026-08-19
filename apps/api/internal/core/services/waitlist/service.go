@@ -2,6 +2,7 @@ package waitlist
 
 import (
 	"net/mail"
+	"strings"
 
 	"github.com/willikay11/wrench/api/internal/core/domain"
 	"github.com/willikay11/wrench/api/internal/core/ports"
@@ -25,7 +26,7 @@ func (s *service) JoinWaitlist(email string) (domain.Waitlist, error) {
 	}
 
 	waitlist := domain.Waitlist{
-		Email: address.Address,
+		Email: strings.ToLower(address.Address),
 	}
 
 	err := s.waitListRepo.Save(&waitlist)
