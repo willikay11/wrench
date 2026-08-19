@@ -35,7 +35,7 @@ func (h *HTTPHandler) JoinWaitlist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	waitlist, err := h.waitlistService.JoinWaitlist(request.Email)
+	waitlist, err := h.waitlistService.JoinWaitlist(r.Context(), request.Email)
 
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidEmail) {

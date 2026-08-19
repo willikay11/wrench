@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
+	"github.com/resend/resend-go/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
@@ -21,6 +22,7 @@ import (
 	waitlistsvc "github.com/willikay11/wrench/api/internal/core/services/waitlist"
 	"github.com/willikay11/wrench/api/internal/database"
 	waitlisthttp "github.com/willikay11/wrench/api/internal/handler/waitlist"
+	resendNotifier "github.com/willikay11/wrench/api/internal/repositories/notifier"
 	waitlistrepo "github.com/willikay11/wrench/api/internal/repositories/waitlist"
 )
 
@@ -48,8 +50,12 @@ func main() {
 	}
 	defer pool.Close()
 
+	// Resend client
+	resendClient := resend.NewClient(cfg.ResendAPIKey)
+
 	// Repositories
 	waitlistRepo := waitlistrepo.NewPostgresRepository(pool)
+	resendNotifier := resendNotifier.NewResendNotifier(resendClient, cfg.FromEmail)
 
 	// Services
 	waitlistSvc := waitlistsvc.NewService(waitlistRepo)

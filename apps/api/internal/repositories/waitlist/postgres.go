@@ -30,8 +30,10 @@ const saveQuery = `
 	ON CONFLICT (email) DO UPDATE SET updatedAt = NOW()
 	RETURNING id`
 
-func (r *postgresRepo) Save(waitlist *domain.Waitlist) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (r *postgresRepo) Save(ctx context.Context, waitlist *domain.Waitlist) error {
+	// Derive from the caller so a client disconnect cancels the query,
+	// while still capping how long we can hold a pool connection.
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	err := r.db.QueryRow(ctx, saveQuery, waitlist.Email).Scan(&waitlist.ID)

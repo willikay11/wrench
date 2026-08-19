@@ -29,6 +29,9 @@ type Config struct {
 	OpenAIAPIKey  string
 	ResendAPIKey  string
 	ChannelToken  string
+
+	// Email
+	FromEmail string
 }
 
 func Load() (*Config, error) {
@@ -48,6 +51,7 @@ func Load() (*Config, error) {
 		"OPENAI_API_KEY": &cfg.OpenAIAPIKey,
 		"RESEND_API_KEY": &cfg.ResendAPIKey,
 		"CHANNEL_TOKEN":  &cfg.ChannelToken,
+		"FROM_EMAIL":     &cfg.FromEmail,
 	}
 
 	var missing []string

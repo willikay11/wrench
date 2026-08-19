@@ -1,6 +1,7 @@
 package waitlist
 
 import (
+	"context"
 	"net/mail"
 	"strings"
 
@@ -18,7 +19,7 @@ func NewService(waitListRepo ports.WaitlistRepository) *service {
 	}
 }
 
-func (s *service) JoinWaitlist(email string) (domain.Waitlist, error) {
+func (s *service) JoinWaitlist(ctx context.Context, email string) (domain.Waitlist, error) {
 	address, errEmail := mail.ParseAddress(email)
 
 	if errEmail != nil {
@@ -29,7 +30,7 @@ func (s *service) JoinWaitlist(email string) (domain.Waitlist, error) {
 		Email: strings.ToLower(address.Address),
 	}
 
-	err := s.waitListRepo.Save(&waitlist)
+	err := s.waitListRepo.Save(ctx, &waitlist)
 
 	if err != nil {
 		return domain.Waitlist{}, err

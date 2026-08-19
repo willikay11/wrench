@@ -1,6 +1,7 @@
 package waitlist_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,7 +14,7 @@ type mockWaitlistRepository struct {
 	saveErr       error
 }
 
-func (m *mockWaitlistRepository) Save(w *domain.Waitlist) error {
+func (m *mockWaitlistRepository) Save(ctx context.Context, w *domain.Waitlist) error {
 	if m.saveErr != nil {
 		return m.saveErr
 	}
@@ -43,7 +44,7 @@ func TestJoinWaitlist(t *testing.T) {
 			mockRepo := &mockWaitlistRepository{}
 			service := waitlist.NewService(mockRepo)
 
-			got, err := service.JoinWaitlist(tc.email)
+			got, err := service.JoinWaitlist(context.Background(), tc.email)
 
 			if tc.wantErr != nil {
 				assert.ErrorIs(t, err, tc.wantErr)
