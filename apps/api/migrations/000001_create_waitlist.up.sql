@@ -5,7 +5,7 @@
 -- identifiers to lowercase, so "updatedAt" and "updatedat" are the same
 -- column — just never quote them and it stays consistent.
 
-CREATE TABLE IF NOT EXISTS waitlist (
+CREATE TABLE waitlist (
   id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email     VARCHAR NOT NULL UNIQUE,
   createdAt TIMESTAMPTZ NOT NULL DEFAULT NOW(),
