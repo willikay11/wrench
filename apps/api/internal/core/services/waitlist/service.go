@@ -38,7 +38,7 @@ func (s *service) JoinWaitlist(ctx context.Context, email string) (domain.Waitli
 		if err := s.waitListRepo.Save(ctx, &waitlist); err != nil {
 			return err
 		}
-		return s.emailQueue.EnqueueEmail(ctx, waitlist.Email, domain.WelcomEmailSubject, domain.WelcomEmailBody)
+		return s.emailQueue.EnqueueEmail(ctx, waitlist.Email, domain.WelcomeEmailSubject, domain.WelcomeEmailBody)
 	})
 
 	if err != nil {
