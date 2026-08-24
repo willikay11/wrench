@@ -48,7 +48,7 @@ func (r *waitlistRepo) Save(ctx context.Context, waitlist *domain.Waitlist) erro
 
 const getWailtlistCountQuery = `SELECT COUNT(email) as count FROM waitlist`
 
-func (r *waitlistRepo) Count(ctx context.Context) (count int, error error) {
+func (r *waitlistRepo) Count(ctx context.Context) (int, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 

@@ -2,6 +2,7 @@ package waitlist_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -103,9 +104,9 @@ func TestCountWaitlist(t *testing.T) {
 
 	t.Run("should return a count of emails in the waitlist", func(t *testing.T) {
 		tests := []testCase{
-			{name: "at least 1 email in the waitlist", expectedCount: 151, wantErr: nil},
+			{name: "at least 1 email in the waitlist", expectedCount: 1, wantErr: nil},
 			{name: "no emails in the waitlist", expectedCount: 0, wantErr: nil},
-			{name: "at least 200 emails in the waitlist", expectedCount: 200, wantErr: nil},
+			{name: "repository failure", expectedCount: 0, wantErr: errors.New("db down")},
 		}
 
 		for _, tc := range tests {

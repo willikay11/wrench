@@ -1,10 +1,10 @@
-// {
-//   "editor.quickSuggestions": {
-//     "other": "off",
-//     "comments": "off",
-//     "strings": "off"
-//   },
-//   "editor.inlineSuggest.enabled": false,
-//   "editor.parameterHints.enabled": true,
-//   "editor.suggestOnTriggerCharacters": true
-// }
+{
+  "editor.quickSuggestions": {
+    "other": "off",
+    "comments": "off",
+    "strings": "off"
+  },
+  "editor.inlineSuggest.enabled": false,
+  "editor.parameterHints.enabled": true,
+  "editor.suggestOnTriggerCharacters": true
+}

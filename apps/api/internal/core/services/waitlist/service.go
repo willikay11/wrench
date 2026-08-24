@@ -48,15 +48,11 @@ func (s *service) JoinWaitlist(ctx context.Context, email string) (domain.Waitli
 	return waitlist, nil
 }
 
-func (s *service) CountWaitlist(ctx context.Context) (count int, error error) {
+func (s *service) CountWaitlist(ctx context.Context) (int, error) {
 	count, err := s.waitListRepo.Count(ctx)
 
 	if err != nil {
 		return 0, err
-	}
-
-	if count > 0 && count < 150 {
-		return 150 + count, nil
 	}
 
 	return count, nil
