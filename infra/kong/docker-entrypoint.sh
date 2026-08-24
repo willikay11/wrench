@@ -12,6 +12,15 @@ set -eu
 : "${REDIS_PORT:=6379}"
 export REDIS_PORT
 
+# Set here rather than inherited: the container runs as the unprivileged
+# `kong` user, and /kong/declarative is root-owned because the template is
+# COPYed in as root. An inherited KONG_DECLARATIVE_CONFIG pointing there — a
+# leftover Railway service variable, say — makes the render below fail with
+# "Permission denied". Deciding the path in the entrypoint makes that
+# impossible regardless of what the environment says.
+KONG_DECLARATIVE_CONFIG=/tmp/kong.yaml
+export KONG_DECLARATIVE_CONFIG
+
 # Named explicitly so envsubst leaves every other $ in the file alone.
 envsubst '${WRENCH_API_URL} ${REDIS_HOST} ${REDIS_PORT} ${REDIS_PASSWORD}' \
   < /kong/declarative/kong.yaml.template \
