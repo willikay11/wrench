@@ -13,7 +13,7 @@ type WaitlistService interface {
 }
 
 type EmailDispatcher interface {
-	DispatchPending(ctx context.Context) error
+	DispatchPending(ctx context.Context)
 }
 
 // Driven Ports
@@ -26,14 +26,15 @@ type EmailQueue interface {
 }
 
 type EmailSender interface {
-	SendEmail(ctx context.Context, to string, subject string, body string) (id string, err error)
+	SendEmail(ctx context.Context, msg domain.EmailMessage) (id string, err error)
 }
 
 type EmailOutbox interface {
 	ClaimPending(ctx context.Context, limit int) ([]domain.OutboxEmail, error)
 	MarkSent(ctx context.Context, id, providerID string) error
 	MarkForRetry(ctx context.Context, id, reason string, nextAttemptAt time.Time) error
-	MarkFailed(ctx context.Context, id, reason string) error // terminal
+	MarkFailed(ctx context.Context, id, reason string) error
+	ReclaimStale(ctx context.Context, olderThan time.Duration) (int, error)
 }
 
 type TxManager interface {

@@ -17,13 +17,18 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/resend/resend-go/v3"
+
 	"github.com/willikay11/wrench/api/internal/config"
+	emaildispatchsvc "github.com/willikay11/wrench/api/internal/core/services/emaildispatch"
 	waitlistsvc "github.com/willikay11/wrench/api/internal/core/services/waitlist"
 	"github.com/willikay11/wrench/api/internal/database"
 	waitlisthttp "github.com/willikay11/wrench/api/internal/handler/waitlist"
-	transactionalOutboxQueue "github.com/willikay11/wrench/api/internal/repositories/queue"
-	transactionManager "github.com/willikay11/wrench/api/internal/repositories/transaction"
+	notifierrepo "github.com/willikay11/wrench/api/internal/repositories/notifier"
+	outboxrepo "github.com/willikay11/wrench/api/internal/repositories/queue"
+	txmanager "github.com/willikay11/wrench/api/internal/repositories/transaction"
 	waitlistrepo "github.com/willikay11/wrench/api/internal/repositories/waitlist"
+	"github.com/willikay11/wrench/api/internal/worker"
 )
 
 func main() {
@@ -50,19 +55,23 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Resend client
-	// resendClient := resend.NewClient(cfg.ResendAPIKey)
+	// Custom client so the notifier can capture response status codes for
+	// permanent-vs-transient classification, and so sends actually time out.
+	resendClient := resend.NewCustomClient(notifierrepo.NewHTTPClient(15*time.Second), cfg.ResendAPIKey)
 
-	// Repositories
+	// Driven adapters
 	waitlistRepo := waitlistrepo.NewPostgresRepository(pool)
-	// resendNotifier := resendNotifier.NewResendNotifier(resendClient, cfg.FromEmail)
-	transactionalOutboxQueue := transactionalOutboxQueue.NewTransactionalOutboxQueue(pool)
-	txManager := transactionManager.NewTxManager(pool)
-	// Services
-	waitlistSvc := waitlistsvc.NewService(waitlistRepo, transactionalOutboxQueue, txManager)
+	emailOutbox := outboxrepo.NewTransactionalOutboxQueue(pool)
+	emailSender := notifierrepo.NewResendNotifier(resendClient, cfg.FromEmail)
+	transactionManager := txmanager.NewTxManager(pool)
 
-	// Handlers
+	// Core services
+	waitlistSvc := waitlistsvc.NewService(waitlistRepo, emailOutbox, transactionManager)
+	emailDispatchSvc := emaildispatchsvc.NewService(emailOutbox, emailSender, cfg.EmailBatchSize, cfg.EmailStaleAfter)
+
+	// Driving adapters
 	waitlistHandler := waitlisthttp.NewHTTPHandler(waitlistSvc)
+	emailWorker := worker.NewDispatcher(emailDispatchSvc, cfg.EmailPollInterval, cfg.EmailTickTimeout)
 
 	// Router
 	r := chi.NewRouter()
@@ -99,6 +108,16 @@ func main() {
 		}
 	}()
 
+	// Start the email dispatch worker. workerDone lets shutdown wait for an
+	// in-flight batch instead of killing it mid-send.
+	workerCtx, stopWorker := context.WithCancel(context.Background())
+	workerDone := make(chan struct{})
+
+	go func() {
+		defer close(workerDone)
+		emailWorker.Run(workerCtx)
+	}()
+
 	// Graceful shutdown
 	// Wait for SIGTERM (Railway sends this on deploy/stop)
 	quit := make(chan os.Signal, 1)
@@ -108,11 +127,23 @@ func main() {
 	log.Info().Msg("Shutting down — draining connections")
 
 	// Give in-flight requests 30 seconds to complete
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal().Err(err).Msg("Forced shutdown")
+	// Tell the worker to stop scheduling new batches, then drain HTTP while
+	// its current batch finishes.
+	stopWorker()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		// Not fatal: exiting here would abandon the worker mid-batch.
+		log.Error().Err(err).Msg("Forced HTTP shutdown")
+	}
+
+	select {
+	case <-workerDone:
+		log.Info().Msg("Email dispatcher drained")
+	case <-shutdownCtx.Done():
+		log.Warn().Msg("Email dispatcher did not drain in time — rows may be left in processing")
 	}
 
 	log.Info().Msg("Server stopped cleanly")
