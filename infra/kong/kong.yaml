@@ -32,7 +32,28 @@ services:
           - http
           - https
 
+  # Answered by Kong itself via request-termination below, so it stays up
+  # even when the API is down. Railway's healthcheck points here: it should
+  # report on the gateway being deployed, not on its upstream.
+  - name: kong-health
+    url: http://localhost:8000
+    routes:
+      - name: kong-health-route
+        paths:
+          - /kong-health
+        strip_path: false
+        protocols:
+          - http
+          - https
+
 plugins:
+  - name: request-termination
+    route: kong-health-route
+    config:
+      status_code: 200
+      content_type: application/json
+      body: '{"status":"ok","gateway":"kong"}'
+
   - name: rate-limiting
     config:
       hour: 1000
