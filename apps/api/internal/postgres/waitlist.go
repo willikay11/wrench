@@ -45,3 +45,20 @@ func (r *waitlistRepo) Save(ctx context.Context, waitlist *domain.Waitlist) erro
 
 	return nil
 }
+
+const getWailtlistCountQuery = `SELECT COUNT(email) as count FROM waitlist`
+
+func (r *waitlistRepo) Count(ctx context.Context) (count int, error error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var emailCount int
+
+	err := from(ctx, r.db).QueryRow(ctx, getWailtlistCountQuery).Scan(&emailCount)
+
+	if err != nil {
+		return 0, fmt.Errorf("query count waitlist: %w", err)
+	}
+
+	return emailCount, nil
+}

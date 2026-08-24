@@ -87,6 +87,7 @@ func main() {
 
 	// API routes
 	r.Post("/v1/waitlist", waitlistHandler.JoinWaitlist)
+	r.Get("/v1/waitlist/count", waitlistHandler.CountWaitlist)
 
 	// Server with timeouts
 	srv := &http.Server{

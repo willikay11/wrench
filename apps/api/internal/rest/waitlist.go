@@ -52,6 +52,18 @@ func (h *WaitlistHandler) JoinWaitlist(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"email": waitlist.Email})
 }
 
+func (h *WaitlistHandler) CountWaitlist(w http.ResponseWriter, r *http.Request) {
+	count, err := h.waitlistService.CountWaitlist(r.Context())
+
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to count waitlist")
+		payload := map[string]string{"error": "Something went wrong"}
+		writeJSON(w, http.StatusInternalServerError, payload)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"count": count})
+}
+
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
