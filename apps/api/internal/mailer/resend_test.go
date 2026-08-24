@@ -1,4 +1,4 @@
-package notifier
+package mailer
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/willikay11/wrench/api/internal/core/domain"
 )
 
-func notifierAgainst(t *testing.T, status int, bodyJSON string) *ResendNotifier {
+func notifierAgainst(t *testing.T, status int, bodyJSON string) *Resend {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -25,7 +25,7 @@ func notifierAgainst(t *testing.T, status int, bodyJSON string) *ResendNotifier 
 	c := resend.NewCustomClient(NewHTTPClient(5*time.Second), "re_test")
 	u, _ := url.Parse(srv.URL + "/")
 	c.BaseURL = u
-	return NewResendNotifier(c, "Wrench <hi@wrench.it.com>")
+	return NewResend(c, "Wrench <hi@wrench.it.com>")
 }
 
 func TestClassification(t *testing.T) {
@@ -72,7 +72,7 @@ func TestSuccessAndNetworkFailure(t *testing.T) {
 	c := resend.NewCustomClient(NewHTTPClient(2*time.Second), "re_test")
 	u, _ := url.Parse("http://127.0.0.1:1/")
 	c.BaseURL = u
-	_, err = NewResendNotifier(c, "x@y.com").SendEmail(context.Background(), domain.EmailMessage{IdempotencyKey: "outbox-row-2", To: "a@b.com", Subject: "s", Body: "b"})
+	_, err = NewResend(c, "x@y.com").SendEmail(context.Background(), domain.EmailMessage{IdempotencyKey: "outbox-row-2", To: "a@b.com", Subject: "s", Body: "b"})
 	if !errors.Is(err, domain.ErrEmailTransient) {
 		t.Fatalf("connection refused should be transient, got: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestIdempotencyKeyIsSent(t *testing.T) {
 	c := resend.NewCustomClient(NewHTTPClient(5*time.Second), "re_test")
 	u, _ := url.Parse(srv.URL + "/")
 	c.BaseURL = u
-	n := NewResendNotifier(c, "Wrench <hi@wrench.it.com>")
+	n := NewResend(c, "Wrench <hi@wrench.it.com>")
 
 	const rowID = "f8d3904f-7117-474e-a696-3eb8b802ab22"
 

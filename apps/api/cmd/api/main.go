@@ -22,12 +22,9 @@ import (
 	"github.com/willikay11/wrench/api/internal/config"
 	emaildispatchsvc "github.com/willikay11/wrench/api/internal/core/services/emaildispatch"
 	waitlistsvc "github.com/willikay11/wrench/api/internal/core/services/waitlist"
-	"github.com/willikay11/wrench/api/internal/database"
-	waitlisthttp "github.com/willikay11/wrench/api/internal/handler/waitlist"
-	notifierrepo "github.com/willikay11/wrench/api/internal/repositories/notifier"
-	outboxrepo "github.com/willikay11/wrench/api/internal/repositories/queue"
-	txmanager "github.com/willikay11/wrench/api/internal/repositories/transaction"
-	waitlistrepo "github.com/willikay11/wrench/api/internal/repositories/waitlist"
+	"github.com/willikay11/wrench/api/internal/mailer"
+	"github.com/willikay11/wrench/api/internal/postgres"
+	"github.com/willikay11/wrench/api/internal/rest"
 	"github.com/willikay11/wrench/api/internal/worker"
 )
 
@@ -49,7 +46,7 @@ func main() {
 	startUpCtx, cancelStartUpCtx := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelStartUpCtx()
 
-	pool, err := database.NewPostgres(startUpCtx, cfg.DatabaseURL)
+	pool, err := postgres.NewPool(startUpCtx, cfg.DatabaseURL)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to Postgres")
 	}
@@ -57,20 +54,20 @@ func main() {
 
 	// Custom client so the notifier can capture response status codes for
 	// permanent-vs-transient classification, and so sends actually time out.
-	resendClient := resend.NewCustomClient(notifierrepo.NewHTTPClient(15*time.Second), cfg.ResendAPIKey)
+	resendClient := resend.NewCustomClient(mailer.NewHTTPClient(15*time.Second), cfg.ResendAPIKey)
 
 	// Driven adapters
-	waitlistRepo := waitlistrepo.NewPostgresRepository(pool)
-	emailOutbox := outboxrepo.NewTransactionalOutboxQueue(pool)
-	emailSender := notifierrepo.NewResendNotifier(resendClient, cfg.FromEmail)
-	transactionManager := txmanager.NewTxManager(pool)
+	waitlistRepo := postgres.NewWaitlistRepository(pool)
+	emailOutbox := postgres.NewOutbox(pool)
+	emailSender := mailer.NewResend(resendClient, cfg.FromEmail)
+	transactionManager := postgres.NewTxManager(pool)
 
 	// Core services
 	waitlistSvc := waitlistsvc.NewService(waitlistRepo, emailOutbox, transactionManager)
 	emailDispatchSvc := emaildispatchsvc.NewService(emailOutbox, emailSender, cfg.EmailBatchSize, cfg.EmailStaleAfter)
 
 	// Driving adapters
-	waitlistHandler := waitlisthttp.NewHTTPHandler(waitlistSvc)
+	waitlistHandler := rest.NewWaitlistHandler(waitlistSvc)
 	emailWorker := worker.NewDispatcher(emailDispatchSvc, cfg.EmailPollInterval, cfg.EmailTickTimeout)
 
 	// Router

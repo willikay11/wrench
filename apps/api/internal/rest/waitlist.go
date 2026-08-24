@@ -1,4 +1,4 @@
-package waitlist
+package rest
 
 import (
 	"encoding/json"
@@ -10,17 +10,17 @@ import (
 	"github.com/willikay11/wrench/api/internal/core/ports"
 )
 
-type HTTPHandler struct {
+type WaitlistHandler struct {
 	waitlistService ports.WaitlistService
 }
 
-func NewHTTPHandler(waitlistService ports.WaitlistService) *HTTPHandler {
-	return &HTTPHandler{
+func NewWaitlistHandler(waitlistService ports.WaitlistService) *WaitlistHandler {
+	return &WaitlistHandler{
 		waitlistService: waitlistService,
 	}
 }
 
-func (h *HTTPHandler) JoinWaitlist(w http.ResponseWriter, r *http.Request) {
+func (h *WaitlistHandler) JoinWaitlist(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Email string `json:"email"`
 	}

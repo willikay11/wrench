@@ -7,28 +7,18 @@ import (
 	"github.com/willikay11/wrench/api/internal/core/domain"
 )
 
-// Driver Ports
-type WaitlistService interface {
-	JoinWaitlist(ctx context.Context, email string) (domain.Waitlist, error)
-}
-
+// Driving — the worker calls in through this.
 type EmailDispatcher interface {
 	DispatchPending(ctx context.Context)
 }
 
-// Driven Ports
-type WaitlistRepository interface {
-	Save(ctx context.Context, waitlist *domain.Waitlist) error
-}
-
+// Driven — the write side of the outbox. Deliberately separate from
+// EmailOutbox so services that only enqueue cannot reach the dispatch side.
 type EmailQueue interface {
 	EnqueueEmail(ctx context.Context, to string, subject string, body string) error
 }
 
-type EmailSender interface {
-	SendEmail(ctx context.Context, msg domain.EmailMessage) (id string, err error)
-}
-
+// Driven — the read and status side of the outbox, used by the dispatcher.
 type EmailOutbox interface {
 	ClaimPending(ctx context.Context, limit int) ([]domain.OutboxEmail, error)
 	MarkSent(ctx context.Context, id, providerID string) error
@@ -37,6 +27,7 @@ type EmailOutbox interface {
 	ReclaimStale(ctx context.Context, olderThan time.Duration) (int, error)
 }
 
-type TxManager interface {
-	WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error
+// Driven — the email provider.
+type EmailSender interface {
+	SendEmail(ctx context.Context, msg domain.EmailMessage) (id string, err error)
 }

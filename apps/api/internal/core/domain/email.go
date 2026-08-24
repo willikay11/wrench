@@ -2,11 +2,8 @@ package domain
 
 import "errors"
 
-type Waitlist struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
-}
-
+// OutboxEmail is a queued email as the dispatcher sees it. Attempts drives the
+// retry ceiling, so it must be populated by whatever claims the row.
 type OutboxEmail struct {
 	ID         string
 	To         string
@@ -37,8 +34,6 @@ const (
 	OutboxStatusProcessing OutboxStatus = "processing"
 )
 
-var ErrInvalidEmail = errors.New("invalid email")
-
 // Delivery outcome classes. Adapters wrap their vendor errors with one of
 // these so the dispatch policy can choose between retrying and giving up
 // without knowing which provider produced the failure.
@@ -51,6 +46,3 @@ var (
 	// limits, provider outages, network faults.
 	ErrEmailTransient = errors.New("transient email delivery failure")
 )
-
-const WelcomeEmailSubject = "Welcome to the waitlist"
-const WelcomeEmailBody = "Thank you for joining the waitlist."

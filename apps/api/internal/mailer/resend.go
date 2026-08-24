@@ -1,4 +1,4 @@
-package notifier
+package mailer
 
 import (
 	"context"
@@ -12,13 +12,13 @@ import (
 	"github.com/willikay11/wrench/api/internal/core/domain"
 )
 
-type ResendNotifier struct {
+type Resend struct {
 	resendClient *resend.Client
 	fromEmail    string
 }
 
-func NewResendNotifier(resendClient *resend.Client, fromEmail string) *ResendNotifier {
-	return &ResendNotifier{
+func NewResend(resendClient *resend.Client, fromEmail string) *Resend {
+	return &Resend{
 		resendClient: resendClient,
 		fromEmail:    fromEmail,
 	}
@@ -63,7 +63,7 @@ func NewHTTPClient(timeout time.Duration) *http.Client {
 	}
 }
 
-func (r *ResendNotifier) SendEmail(ctx context.Context, msg domain.EmailMessage) (id string, err error) {
+func (r *Resend) SendEmail(ctx context.Context, msg domain.EmailMessage) (id string, err error) {
 	recorder := &statusRecorder{}
 	ctx = context.WithValue(ctx, statusCtxKey{}, recorder)
 

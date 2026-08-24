@@ -1,6 +1,4 @@
-// apps/api/internal/database/postgres.go
-
-package database
+package postgres
 
 import (
 	"context"
@@ -9,10 +7,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// NewPostgres opens a connection pool and verifies it can actually reach the
+// NewPool opens a connection pool and verifies it can actually reach the
 // database. A pool (not a single connection) is what you want behind an HTTP
 // server: pgx.Conn is not safe for concurrent use, pgxpool.Pool is.
-func NewPostgres(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("connect to postgres: %w", err)
