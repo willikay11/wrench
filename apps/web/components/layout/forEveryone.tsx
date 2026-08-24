@@ -1,9 +1,8 @@
 'use client';
 
-import { Button } from "@/components/ui/button";
 import { CustomGrid } from "@/components/layout/customGrid";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowRight02Icon, ArrowUpRight02FreeIcons } from "@hugeicons/core-free-icons";
+import { ArrowRight02Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 import { JoinWaitlistButton } from "./joinWailtListButton";
 
@@ -36,12 +35,12 @@ const ForEveryone = () => {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 items-center">
                 <div style={dotsGridStyle} />
                 <div className="flex flex-col col-span-5 space-y-4 md:space-y-6">
-                    <p className="font-mono uppercase text-sm text-primary">// for every car owner</p>
+                    <p className="font-mono uppercase text-sm text-primary">{"// for every car owner"}</p>
                     <h1 className="text-3xl md:text-5xl font-semibold text-white max-w-[640px]">
-                        Your car's history lives in too many places.
+                        Your car&apos;s history lives in too many places.
                     </h1>
                     <p className=" text-base md:text-lg text-zinc-500 max-w-[520px]">
-                        The service receipt in the glovebox. The mileage scribbled in your phone notes. The reminder you set and ignored. Wrench puts your car's full history in one place.
+                        The service receipt in the glovebox. The mileage scribbled in your phone notes. The reminder you set and ignored. Wrench puts your car&apos;s full history in one place.
                     </p>
                     <div className="flex flex-col gap-2">
                         <JoinWaitlistButton/>
@@ -80,7 +79,7 @@ const ForEveryone = () => {
                                     ask mwangi about the noise
                                 </div>
                             </div>
-                            <div className="text-[#EF4444] text-sm mt-4 text-center">Your car's history. Somewhere in here.</div>
+                            <div className="text-[#EF4444] text-sm mt-4 text-center">Your car&apos;s history. Somewhere in here.</div>
                         </div>
                         <div className="flex h-20 w-full shrink-0 items-center justify-center relative xl:h-auto xl:w-12">
                             <HugeiconsIcon icon={ArrowRight02Icon} size={32} className="rotate-90 xl:rotate-0" />
@@ -114,13 +113,13 @@ const ForEveryone = () => {
                                     </div>
                                     <span className="text-[#F5F5F5] text-[12px] font-medium">Rex</span>
                                     </div>
-                                    <p className="text-[#CCCCCC] text-[12px] leading-[1.5] m-0">Your insurance is expires in 3 weeks. Also, that note about brakes at 130K? You're at 132,400 now. Worth checking both at the same visit.</p>
+                                    <p className="text-[#CCCCCC] text-[12px] leading-[1.5] m-0">Your insurance is expires in 3 weeks. Also, that note about brakes at 130K? You&apos;re at 132,400 now. Worth checking both at the same visit.</p>
                                 </div>
 
                                 <span className="inline-block mt-3 border border-[#2A2A2A] text-[#AAAAAA] text-[11px] px-3 py-1.5 rounded-full">Book Garage →</span>
                                 </div>
 
-                                <div className="text-[#22C55E] text-sm mt-4">Your car's history. Right here.</div>
+                                <div className="text-[#22C55E] text-sm mt-4">Your car&apos;s history. Right here.</div>
                             </div>
                             </div>
                         </div>

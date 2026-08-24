@@ -40,9 +40,13 @@ jobs:
         with:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
+      # v2.6.2 is built with go1.24 and refuses to lint a module targeting
+      # go 1.25.0 ("the Go language version used to build golangci-lint is
+      # lower than the targeted Go version"). Keep this at or above the Go
+      # version in apps/api/go.mod.
       - uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.6.2
+          version: v2.13.1
           working-directory: apps/api
       - run: go test ./...
       - run: go build -o bin/api ./cmd/api

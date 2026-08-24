@@ -1,6 +1,6 @@
-import { act, render } from '@testing-library/react'
-import { screen, waitFor } from '@testing-library/dom'
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { render } from '@testing-library/react'
+import { screen } from '@testing-library/dom'
+import { describe, it, expect } from 'vitest'
 
 import { toastSuccess, toastError, toastInfo, toastWarning } from './toast'
 import { Toaster } from '@/components/ui/sonner'
@@ -27,7 +27,7 @@ describe('toastSuccess', () => {
         toastSuccess({ title: "Success" })
         const toastElement = await screen.findByRole('success-toast')
         expect(toastElement).toBeInTheDocument()
-        expect(toastElement).toHaveClass('border-l-4 border-l-success')
+        expect(toastElement).toHaveClass('border-l-4 border-l-green-500')
     })
 
     it('renders the error toast', async () => {
@@ -35,7 +35,7 @@ describe('toastSuccess', () => {
         toastError({ title: "Error" })
         const toastElement = await screen.findByRole('error-toast')
         expect(toastElement).toBeInTheDocument()
-        expect(toastElement).toHaveClass('border-l-4 border-l-destructive')
+        expect(toastElement).toHaveClass('border-l-4 border-l-red-500')
     })
 
     it('renders the info toast', async () => {
@@ -43,7 +43,7 @@ describe('toastSuccess', () => {
         toastInfo({ title: "Info" })
         const toastElement = await screen.findByRole('info-toast')
         expect(toastElement).toBeInTheDocument()
-        expect(toastElement).toHaveClass('border-l-4 border-l-info')
+        expect(toastElement).toHaveClass('border-l-4 border-l-blue-500')
     })
 
     it('renders the warning toast', async () => {

@@ -5,21 +5,23 @@ import { describe, it, expect } from 'vitest'
 import { Feature } from './feature'
 
 describe('Feature', () => {
-    it('renders the feature component', () => {
+    it('renders the section label', () => {
         render(<Feature />)
-        const featureElement = screen.getByText(/Garage Management/i)
-        expect(featureElement).toBeInTheDocument()
+        expect(screen.getByText(/what wrench does/i)).toBeInTheDocument()
     })
 
-    it('renders the AI assistant feature in the feature component', () => {
+    it('renders the modification logging feature', () => {
         render(<Feature />)
-        const aiAssistantFeature = screen.getByText(/AI assistant/i)
-        expect(aiAssistantFeature).toBeInTheDocument()
+        expect(screen.getByText(/Every modification, logged\./i)).toBeInTheDocument()
     })
 
-    it('renders the build planner feature in the feature component', () => {
+    it('renders the build stage tracking feature', () => {
         render(<Feature />)
-        const buildPlannerFeature = screen.getByText(/Build planner/i)
-        expect(buildPlannerFeature).toBeInTheDocument()
+        expect(screen.getByText(/Every build stage, tracked\./i)).toBeInTheDocument()
+    })
+
+    it('renders the service record feature', () => {
+        render(<Feature />)
+        expect(screen.getByText(/Every service record, in one place\./i)).toBeInTheDocument()
     })
 })

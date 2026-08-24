@@ -2,4 +2,4 @@ package domain
 
 import "errors"
 
-var ErrCacheMiss = errors.New("Cache missed")
+var ErrCacheMiss = errors.New("cache miss")

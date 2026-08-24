@@ -17,7 +17,7 @@ func Redis(ctx context.Context, redisUrl string) (*redis.Client, error) {
 
 	rdb := redis.NewClient(opt)
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		rdb.Close()
+		_ = rdb.Close()
 		return nil, err
 	}
 
