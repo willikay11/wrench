@@ -22,7 +22,10 @@ envsubst '${WRENCH_API_URL} ${REDIS_HOST} ${REDIS_PORT} ${REDIS_PASSWORD}' \
 # crash loop.
 kong config parse "${KONG_DECLARATIVE_CONFIG}"
 
-# Railway assigns the port at runtime.
-export KONG_PROXY_LISTEN="0.0.0.0:${PORT:-8000}"
+# Railway assigns the port at runtime, and its private network — which is
+# where healthchecks arrive — is IPv6-only. Binding 0.0.0.0 alone leaves Kong
+# unreachable there and the deploy fails on "Healthcheck failure" even though
+# Kong started correctly.
+export KONG_PROXY_LISTEN="0.0.0.0:${PORT:-8000}, [::]:${PORT:-8000}"
 
 exec kong start
