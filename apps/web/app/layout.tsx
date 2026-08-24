@@ -19,8 +19,47 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Wrench",
-  description: "Wrench is a car modification tracking and planning tool that helps you keep track of your car's modifications, plan future modifications, and get AI advice on your specific car.",
+  title: "Wrench: Your AI mechanic that knows your exact build",
+  description: "Your car's full history, every mod, and an AI crew chief who knows your car.",
+  metadataBase: new URL("https://wrench.it.com"),
+  icons: {
+    apple: "/apple-touch-icon.png",
+    icon: [
+      {
+        url: "/favicon-32x32.png",
+        sizes: "32x32",
+        type: "image/png",
+      },
+      {
+        url: "/favicon-16x16.png",
+        sizes: "16x16",
+        type: "image/png",
+      },
+    ],
+  },
+  manifest: "/site.webmanifest",
+  openGraph: {
+    title: "Wrench: Your AI mechanic that knows your exact build",
+    description: "Your car's full history, every mod, and an AI crew chief who knows your car.",
+    url: "https://wrench.it.com",
+    siteName: "Wrench",
+    images: [
+      {
+        url: "/api/og",
+        width: 1200,
+        height: 630,
+        alt: "Wrench",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Wrench: Your AI mechanic that knows your exact build",
+    description: "Your car's full history, every mod, and an AI crew chief who knows your car.",
+    images: ["/api/og"],
+  },
 };
 
 export default function RootLayout({

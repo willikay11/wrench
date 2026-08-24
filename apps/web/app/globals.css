@@ -4,6 +4,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Viewports big enough for the hero panels to work as one-screen slides. Below
+ * this the two panels stack their visual column and need ~1100px of height, so
+ * they stay ordinary scrolling sections. Kept in sync with the media query on
+ * `html.hero-snap` further down.
+ */
+@custom-variant hero-slides (@media (width >= 80rem) and (height >= 46rem));
+
 @theme {
   /* Backgrounds */
   --color-surface-base: #080808;
@@ -30,6 +38,17 @@
   /* Animations */
   --animate-ring-pulse: wr-ring-pulse 4s ease-in-out infinite;
   --animate-eye-scan: wr-eye-scan 3s ease-in-out infinite;
+  --animate-hint-pulse: wr-hint-pulse 2s ease-in-out infinite;
+
+  @keyframes wr-hint-pulse {
+    0%,
+    100% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
 
   @keyframes wr-eye-scan {
     0%,
@@ -175,5 +194,36 @@
   }
   html {
     @apply font-sans;
+  }
+
+  /*
+   * Scroll snapping for the two hero panels. <HeroScrollSnap /> adds this class
+   * on mount and drops it on unmount, so only pages rendering the hero snap.
+   *
+   * Snapping is on the viewport scroller rather than a nested scroll container
+   * so that paging keys, the trackpad and the scrollbar keep working natively.
+   * The catch is that mandatory snapping applies to the whole document, so
+   * everything below the hero is wrapped in one snap area (see the marketing
+   * page). A snap area taller than the viewport is a valid snap position at
+   * every offset that covers the viewport, which hands ordinary free scrolling
+   * back to the rest of the page.
+   */
+  /* Matches the `hero-slides` variant declared at the top of this file. */
+  @media (width >= 80rem) and (height >= 46rem) {
+    html.hero-snap {
+      scroll-snap-type: y mandatory;
+    }
+  }
+
+  /* Height of the (in-flow) navbar, so the first panel can fill what is left
+     of the viewport underneath it. */
+  :root {
+    --wr-nav-h: 3.25rem;
+  }
+
+  @media (width >= 48rem) {
+    :root {
+      --wr-nav-h: 4rem;
+    }
   }
 }

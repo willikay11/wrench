@@ -5,6 +5,7 @@ import { CustomGrid } from "@/components/layout/customGrid";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowRight02Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
+import { JoinWaitlistButton } from "./joinWailtListButton";
 
 /** Chrome shared by the mock browser windows in the "old way" collage. */
 const windowBase = "absolute overflow-hidden rounded-lg border border-[#2A2A2A] bg-[#1C1C1C] text-[12px] leading-[1.5] text-[#CCCCCC]";
@@ -26,10 +27,12 @@ const BrowserWindow = ({ url, className, children }: {
 );
 
 const ForBuilders = () => {
+    // Fills the panel it sits in, with content-center keeping the content
+    // itself vertically centred.
     return (
-        <div className="bg-[#0A0A0A] relative overflow-x-hidden">
+        <div className="bg-[#0A0A0A] relative grid w-full content-center overflow-x-hidden hero-slides:h-full">
             <CustomGrid>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 min-h-screen items-center relative">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 items-center relative">
                     <div className="flex flex-col col-span-5 space-y-4 md:space-y-6">
                         <p className="font-mono uppercase text-sm text-primary">// for every car builder</p>
                         <h1 className="text-3xl md:text-5xl font-semibold text-white max-w-[640px]">
@@ -39,7 +42,7 @@ const ForBuilders = () => {
                             The forum thread from 2019. The YouTube video that skips the part you need. Wrench gives you an AI crew chief who already knows your specific build.
                         </p>
                         <div className="flex flex-col gap-2">
-                            <Button variant="primary" className="font-semibold w-fit">Join the Waitlist</Button>
+                            <JoinWaitlistButton className="w-full md:w-fit" />
                             <span className="text-xs text-zinc-500">Free to start. No credit card. No spam.</span>
                         </div>
                     </div>

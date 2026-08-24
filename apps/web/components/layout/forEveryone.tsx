@@ -5,6 +5,7 @@ import { CustomGrid } from "@/components/layout/customGrid";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowRight02Icon, ArrowUpRight02FreeIcons } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
+import { JoinWaitlistButton } from "./joinWailtListButton";
 
 /** Shared look for the scattered paper scraps in the "old way" collage. */
 const scrapBase = "absolute rounded-[2px] shadow-[0_6px_10px_rgba(0,0,0,0.4)]";
@@ -27,10 +28,12 @@ const dotsGridStyle: React.CSSProperties = {
 };
 
 const ForEveryone = () => {
+    // Fills the panel so the dot grid behind it still reaches the navbar;
+    // content-center keeps the content itself vertically centred.
     return (
-        <div className="relative overflow-x-hidden">
+        <div className="relative grid w-full content-center overflow-x-hidden hero-slides:h-full">
         <CustomGrid>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 min-h-screen items-center">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 items-center">
                 <div style={dotsGridStyle} />
                 <div className="flex flex-col col-span-5 space-y-4 md:space-y-6">
                     <p className="font-mono uppercase text-sm text-primary">// for every car owner</p>
@@ -41,7 +44,7 @@ const ForEveryone = () => {
                         The service receipt in the glovebox. The mileage scribbled in your phone notes. The reminder you set and ignored. Wrench puts your car's full history in one place.
                     </p>
                     <div className="flex flex-col gap-2">
-                        <Button variant="primary" className="font-semibold w-fit">Join the Waitlist</Button>
+                        <JoinWaitlistButton/>
                         <span className="text-xs text-zinc-700">Free to start. No credit card. No spam.</span>
                     </div>
                 </div>
@@ -77,7 +80,7 @@ const ForEveryone = () => {
                                     ask mwangi about the noise
                                 </div>
                             </div>
-                            <div className="text-[#EF4444] text-sm mt-4">Your car's history. Somewhere in here.</div>
+                            <div className="text-[#EF4444] text-sm mt-4 text-center">Your car's history. Somewhere in here.</div>
                         </div>
                         <div className="flex h-20 w-full shrink-0 items-center justify-center relative xl:h-auto xl:w-12">
                             <HugeiconsIcon icon={ArrowRight02Icon} size={32} className="rotate-90 xl:rotate-0" />

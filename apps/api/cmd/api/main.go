@@ -13,14 +13,24 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/resend/resend-go/v3"
+
 	"github.com/willikay11/wrench/api/internal/config"
-	// "github.com/willikay11/wrench/api/internal/handler"
+	emaildispatchsvc "github.com/willikay11/wrench/api/internal/core/services/emaildispatch"
+	waitlistsvc "github.com/willikay11/wrench/api/internal/core/services/waitlist"
+	"github.com/willikay11/wrench/api/internal/mailer"
+	"github.com/willikay11/wrench/api/internal/postgres"
+	"github.com/willikay11/wrench/api/internal/rest"
+	"github.com/willikay11/wrench/api/internal/worker"
 )
 
 func main() {
+	_ = godotenv.Load()
+
 	// Structured logging
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.With().Caller().Logger()
@@ -28,9 +38,37 @@ func main() {
 	// Fail-fast config loading
 	// If any required env var is missing → os.Exit(1)
 	cfg, err := config.Load()
+
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to load config")
 	}
+
+	startUpCtx, cancelStartUpCtx := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelStartUpCtx()
+
+	pool, err := postgres.NewPool(startUpCtx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to Postgres")
+	}
+	defer pool.Close()
+
+	// Custom client so the notifier can capture response status codes for
+	// permanent-vs-transient classification, and so sends actually time out.
+	resendClient := resend.NewCustomClient(mailer.NewHTTPClient(15*time.Second), cfg.ResendAPIKey)
+
+	// Driven adapters
+	waitlistRepo := postgres.NewWaitlistRepository(pool)
+	emailOutbox := postgres.NewOutbox(pool)
+	emailSender := mailer.NewResend(resendClient, cfg.FromEmail)
+	transactionManager := postgres.NewTxManager(pool)
+
+	// Core services
+	waitlistSvc := waitlistsvc.NewService(waitlistRepo, emailOutbox, transactionManager)
+	emailDispatchSvc := emaildispatchsvc.NewService(emailOutbox, emailSender, cfg.EmailBatchSize, cfg.EmailStaleAfter)
+
+	// Driving adapters
+	waitlistHandler := rest.NewWaitlistHandler(waitlistSvc)
+	emailWorker := worker.NewDispatcher(emailDispatchSvc, cfg.EmailPollInterval, cfg.EmailTickTimeout)
 
 	// Router
 	r := chi.NewRouter()
@@ -48,7 +86,7 @@ func main() {
 	})
 
 	// API routes
-	// r.Mount("/v1", handler.NewRouter(cfg))
+	r.Post("/v1/waitlist", waitlistHandler.JoinWaitlist)
 
 	// Server with timeouts
 	srv := &http.Server{
@@ -67,6 +105,16 @@ func main() {
 		}
 	}()
 
+	// Start the email dispatch worker. workerDone lets shutdown wait for an
+	// in-flight batch instead of killing it mid-send.
+	workerCtx, stopWorker := context.WithCancel(context.Background())
+	workerDone := make(chan struct{})
+
+	go func() {
+		defer close(workerDone)
+		emailWorker.Run(workerCtx)
+	}()
+
 	// Graceful shutdown
 	// Wait for SIGTERM (Railway sends this on deploy/stop)
 	quit := make(chan os.Signal, 1)
@@ -76,11 +124,23 @@ func main() {
 	log.Info().Msg("Shutting down — draining connections")
 
 	// Give in-flight requests 30 seconds to complete
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal().Err(err).Msg("Forced shutdown")
+	// Tell the worker to stop scheduling new batches, then drain HTTP while
+	// its current batch finishes.
+	stopWorker()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		// Not fatal: exiting here would abandon the worker mid-batch.
+		log.Error().Err(err).Msg("Forced HTTP shutdown")
+	}
+
+	select {
+	case <-workerDone:
+		log.Info().Msg("Email dispatcher drained")
+	case <-shutdownCtx.Done():
+		log.Warn().Msg("Email dispatcher did not drain in time — rows may be left in processing")
 	}
 
 	log.Info().Msg("Server stopped cleanly")
