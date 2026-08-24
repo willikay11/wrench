@@ -21,6 +21,9 @@ type mockWaitlistRepository struct {
 	saveErr       error
 	count         int
 	countErr      error
+	// alreadyExists makes Save behave like an ON CONFLICT update — the row
+	// was touched, not created, so no welcome email is owed.
+	alreadyExists bool
 }
 
 type mockWaitlistRedis struct {
@@ -52,6 +55,7 @@ func (m *mockWaitlistRepository) Save(ctx context.Context, w *domain.Waitlist) e
 	if m.saveErr != nil {
 		return m.saveErr
 	}
+	w.IsNew = !m.alreadyExists
 	m.savedWaitlist = w
 	return nil
 }
@@ -150,5 +154,38 @@ func TestCountWaitlist(t *testing.T) {
 			assert.Equal(t, tc.expectedCount, count)
 		}
 
+	})
+}
+
+func TestJoinWaitlistDoesNotResendOnRepeatSignup(t *testing.T) {
+	t.Run("first signup queues the welcome email", func(t *testing.T) {
+		mockRepo := &mockWaitlistRepository{}
+		mockEmailQueue := &mockEmailQueue{}
+		mockCache := &mockWaitlistRedis{}
+		service := waitlist.NewService(mockRepo, mockCache, mockEmailQueue, &mockTxManager{})
+
+		_, err := service.JoinWaitlist(context.Background(), "willikay11@gmail.com")
+
+		assert.NoError(t, err)
+		assert.True(t, mockEmailQueue.enqueueEmailCalled, "a new signup must be emailed")
+		assert.Equal(t, "willikay11@gmail.com", mockEmailQueue.enqueueEmailTo)
+		assert.Equal(t, domain.WelcomeEmailTemplateId, mockEmailQueue.enqueueEmailTemplateId)
+	})
+
+	t.Run("repeat signup queues nothing", func(t *testing.T) {
+		// The row already exists, so Save updates it rather than inserting.
+		mockRepo := &mockWaitlistRepository{alreadyExists: true}
+		mockEmailQueue := &mockEmailQueue{}
+		mockCache := &mockWaitlistRedis{}
+		service := waitlist.NewService(mockRepo, mockCache, mockEmailQueue, &mockTxManager{})
+
+		got, err := service.JoinWaitlist(context.Background(), "willikay11@gmail.com")
+
+		assert.NoError(t, err, "a repeat signup is still a success for the caller")
+		assert.Equal(t, "willikay11@gmail.com", got.Email)
+		assert.False(t, mockEmailQueue.enqueueEmailCalled,
+			"repeat signup must not queue a second welcome email: each enqueue "+
+				"creates a new outbox row with a new idempotency key, which the "+
+				"provider cannot deduplicate")
 	})
 }

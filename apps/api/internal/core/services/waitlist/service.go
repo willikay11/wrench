@@ -43,6 +43,16 @@ func (s *service) JoinWaitlist(ctx context.Context, email string) (domain.Waitli
 			return err
 		}
 
+		// A repeat signup touches the existing row rather than creating one.
+		// Enqueueing again would mint a fresh outbox row with a fresh
+		// idempotency key, so Resend could not collapse the two and the
+		// address would receive a second welcome email. The endpoint is
+		// public and unauthenticated, which makes that a way to mail-bomb a
+		// third party from our sending domain.
+		if !waitlist.IsNew {
+			return nil
+		}
+
 		c, err := s.waitListRepo.Count(ctx)
 
 		if err != nil {
@@ -57,8 +67,12 @@ func (s *service) JoinWaitlist(ctx context.Context, email string) (domain.Waitli
 		return domain.Waitlist{}, err
 	}
 
-	if cacheErr := s.waitListCache.IncreaseCount(ctx, count); cacheErr != nil {
-		log.Warn().Err(cacheErr).Msg("Failed to refresh waitlist count cache")
+	// Only a new row changes the count, and count is only populated on that
+	// path — refreshing otherwise would write a zero into the cache.
+	if waitlist.IsNew {
+		if cacheErr := s.waitListCache.IncreaseCount(ctx, count); cacheErr != nil {
+			log.Warn().Err(cacheErr).Msg("Failed to refresh waitlist count cache")
+		}
 	}
 
 	return waitlist, nil

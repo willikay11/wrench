@@ -38,7 +38,8 @@ plugins:
   - name: cors
     config:
       origins:
-        - https://wrench.ai
+        - https://wrench.it.com
+        - https://staging.wrench.it.com
         - http://localhost:3000
       methods:
         - GET
