@@ -30,7 +30,6 @@ services:
         preserve_host: false
         protocols:
           - http
-          - https
 
   # Answered by Kong itself via request-termination below, so it stays up
   # even when the API is down. Railway's healthcheck points here: it should
@@ -44,7 +43,6 @@ services:
         strip_path: false
         protocols:
           - http
-          - https
 
 plugins:
   - name: request-termination
