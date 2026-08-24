@@ -1,9 +1,16 @@
 FROM kong:3.6-ubuntu
 
-# envsubst (gettext-base) renders kong.yaml at boot — see docker-entrypoint.sh.
+# gettext-base provides envsubst, which renders kong.yaml at boot — see
+# docker-entrypoint.sh. curl and iproute2 are for debugging from inside the
+# running container (railway ssh): curl to test routes over both IPv4 and
+# IPv6, ss to confirm what Kong is actually listening on.
 USER root
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gettext-base \
+    && apt-get install -y --no-install-recommends \
+        gettext-base \
+        curl \
+        ca-certificates \
+        iproute2 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY kong.yaml /kong/declarative/kong.yaml.template
