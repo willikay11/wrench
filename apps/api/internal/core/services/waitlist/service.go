@@ -10,16 +10,18 @@ import (
 )
 
 type service struct {
-	waitListRepo ports.WaitlistRepository
-	emailQueue   ports.EmailQueue
-	txManager    ports.TxManager
+	waitListRepo  ports.WaitlistRepository
+	waitListRedis ports.WaitlistRedis
+	emailQueue    ports.EmailQueue
+	txManager     ports.TxManager
 }
 
-func NewService(waitListRepo ports.WaitlistRepository, emailQueue ports.EmailQueue, txManager ports.TxManager) *service {
+func NewService(waitListRepo ports.WaitlistRepository, waitListRedis ports.WaitlistRedis, emailQueue ports.EmailQueue, txManager ports.TxManager) *service {
 	return &service{
-		waitListRepo: waitListRepo,
-		emailQueue:   emailQueue,
-		txManager:    txManager,
+		waitListRepo:  waitListRepo,
+		waitListRedis: waitListRedis,
+		emailQueue:    emailQueue,
+		txManager:     txManager,
 	}
 }
 
@@ -49,10 +51,13 @@ func (s *service) JoinWaitlist(ctx context.Context, email string) (domain.Waitli
 }
 
 func (s *service) CountWaitlist(ctx context.Context) (int, error) {
-	count, err := s.waitListRepo.Count(ctx)
+	count, err := s.waitListRedis.Count(ctx)
 
 	if err != nil {
-		return 0, err
+		count, err = s.waitListRepo.Count(ctx)
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	return count, nil

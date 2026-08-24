@@ -17,3 +17,7 @@ type WaitlistRepository interface {
 	Save(ctx context.Context, waitlist *domain.Waitlist) error
 	Count(ctx context.Context) (int, error)
 }
+
+type WaitlistRedis interface {
+	Count(ctx context.Context) (int, error)
+}

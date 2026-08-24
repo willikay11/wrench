@@ -1,10 +1,27 @@
 {
+  // Language-server completions (functions, methods, types) pop up as you
+  // type code — but never inside comments or string literals.
   "editor.quickSuggestions": {
-    "other": "off",
+    "other": "on",
     "comments": "off",
     "strings": "off"
   },
+
+  // No AI ghost text predicting the rest of your line.
   "editor.inlineSuggest.enabled": false,
+
+  // Completions after "." and similar, plus the signature hint showing which
+  // argument you are on.
+  "editor.suggestOnTriggerCharacters": true,
   "editor.parameterHints.enabled": true,
-  "editor.suggestOnTriggerCharacters": true
+
+  // Tab accepts a completion; Enter always means newline. Stops a stray Enter
+  // from inserting whatever happened to be highlighted.
+  "editor.acceptSuggestionOnEnter": "on",
+
+  "gopls": {
+    // Completing a function fills its parameters as tab-through placeholders
+    // rather than just the name and empty parens.
+    "ui.completion.usePlaceholders": true
+  }
 }

@@ -23,6 +23,11 @@ type mockWaitlistRepository struct {
 	countErr      error
 }
 
+type mockWaitlistRedis struct {
+	count    int
+	countErr error
+}
+
 type mockEmailQueue struct {
 	enqueueEmailCalled            bool
 	enqueueEmailTo                string
@@ -49,7 +54,14 @@ func (m *mockWaitlistRepository) Save(ctx context.Context, w *domain.Waitlist) e
 	return nil
 }
 
-func (m *mockWaitlistRepository) Count(ctx context.Context) (count int, err error) {
+func (m *mockWaitlistRepository) Count(ctx context.Context) (int, error) {
+	if m.countErr != nil {
+		return 0, m.countErr
+	}
+	return m.count, nil
+}
+
+func (m *mockWaitlistRedis) Count(ctx context.Context) (int, error) {
 	if m.countErr != nil {
 		return 0, m.countErr
 	}
@@ -76,9 +88,10 @@ func TestJoinWaitlist(t *testing.T) {
 
 		for _, tc := range tests {
 			mockRepo := &mockWaitlistRepository{}
+			mockRedis := &mockWaitlistRedis{}
 			mockEmailQueue := &mockEmailQueue{}
 			mockTxManager := &mockTxManager{}
-			service := waitlist.NewService(mockRepo, mockEmailQueue, mockTxManager)
+			service := waitlist.NewService(mockRepo, mockRedis, mockEmailQueue, mockTxManager)
 
 			got, err := service.JoinWaitlist(context.Background(), tc.email)
 
@@ -113,9 +126,13 @@ func TestCountWaitlist(t *testing.T) {
 			mockRepo := &mockWaitlistRepository{
 				count: tc.expectedCount,
 			}
+			mockRedis := &mockWaitlistRedis{
+				count: tc.expectedCount,
+			}
+
 			mockEmailQueue := &mockEmailQueue{}
 			mockTxManager := &mockTxManager{}
-			service := waitlist.NewService(mockRepo, mockEmailQueue, mockTxManager)
+			service := waitlist.NewService(mockRepo, mockRedis, mockEmailQueue, mockTxManager)
 
 			count, err := service.CountWaitlist(context.Background())
 
