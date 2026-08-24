@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -9,6 +10,7 @@ import (
 func Redis(ctx context.Context, redisUrl string) (*redis.Client, error) {
 	opt, err := redis.ParseURL(redisUrl)
 
+	fmt.Printf(opt.Addr, opt.Password)
 	if err != nil {
 		return nil, err
 	}

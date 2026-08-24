@@ -5,7 +5,7 @@ _transform: true
 
 services:
   - name: wrench-api
-    url: http://wrench.railway.internal:8080
+    url: ${WRENCH_API_URL}
     connect_timeout: 10000
     read_timeout: 60000
     write_timeout: 60000
@@ -28,7 +28,7 @@ plugins:
       policy: redis
       # Updated: redis.host instead of redis_host
       redis:
-        host: redis.railway.internal
+        host: ${REDIS_URL}
         port: 6379
         username: default
         password: $(KONG_REDIS_PASSWORD)
