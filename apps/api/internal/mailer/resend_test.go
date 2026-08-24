@@ -48,7 +48,7 @@ func TestClassification(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			n := notifierAgainst(t, tc.status, tc.body)
-			_, err := n.SendEmail(context.Background(), domain.EmailMessage{IdempotencyKey: "outbox-row-1", To: "a@b.com", Subject: "s", Body: "<p>b</p>"})
+			_, err := n.SendEmail(context.Background(), domain.EmailMessage{IdempotencyKey: "outbox-row-1", To: "a@b.com", Subject: "s", TemplateID: "t", TemplateVariables: map[string]any{"x": 1}})
 			if err == nil {
 				t.Fatal("expected an error")
 			}
@@ -62,7 +62,7 @@ func TestClassification(t *testing.T) {
 
 func TestSuccessAndNetworkFailure(t *testing.T) {
 	n := notifierAgainst(t, 200, `{"id":"msg_abc123"}`)
-	id, err := n.SendEmail(context.Background(), domain.EmailMessage{IdempotencyKey: "outbox-row-1", To: "a@b.com", Subject: "s", Body: "<p>b</p>"})
+	id, err := n.SendEmail(context.Background(), domain.EmailMessage{IdempotencyKey: "outbox-row-1", To: "a@b.com", Subject: "s", TemplateID: "t", TemplateVariables: map[string]any{"x": 1}})
 	if err != nil || id != "msg_abc123" {
 		t.Fatalf("success path broken: id=%q err=%v", id, err)
 	}
@@ -72,7 +72,7 @@ func TestSuccessAndNetworkFailure(t *testing.T) {
 	c := resend.NewCustomClient(NewHTTPClient(2*time.Second), "re_test")
 	u, _ := url.Parse("http://127.0.0.1:1/")
 	c.BaseURL = u
-	_, err = NewResend(c, "x@y.com").SendEmail(context.Background(), domain.EmailMessage{IdempotencyKey: "outbox-row-2", To: "a@b.com", Subject: "s", Body: "b"})
+	_, err = NewResend(c, "x@y.com").SendEmail(context.Background(), domain.EmailMessage{IdempotencyKey: "outbox-row-2", To: "a@b.com", Subject: "s", TemplateID: "t", TemplateVariables: map[string]any{"x": 1}})
 	if !errors.Is(err, domain.ErrEmailTransient) {
 		t.Fatalf("connection refused should be transient, got: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestIdempotencyKeyIsSent(t *testing.T) {
 	// Two sends of the same outbox row — the retry after a lost status write.
 	for i := 0; i < 2; i++ {
 		if _, err := n.SendEmail(context.Background(), domain.EmailMessage{
-			IdempotencyKey: rowID, To: "a@b.com", Subject: "s", Body: "b",
+			IdempotencyKey: rowID, To: "a@b.com", Subject: "s", TemplateID: "t", TemplateVariables: map[string]any{"x": 1},
 		}); err != nil {
 			t.Fatalf("send %d: %v", i+1, err)
 		}

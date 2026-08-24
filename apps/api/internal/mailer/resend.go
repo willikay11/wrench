@@ -64,6 +64,10 @@ func NewHTTPClient(timeout time.Duration) *http.Client {
 }
 
 func (r *Resend) SendEmail(ctx context.Context, msg domain.EmailMessage) (id string, err error) {
+	if msg.TemplateID == "" {
+		return "", fmt.Errorf("send email via resend: %w: template ID is required", domain.ErrEmailPermanent)
+	}
+
 	recorder := &statusRecorder{}
 	ctx = context.WithValue(ctx, statusCtxKey{}, recorder)
 
@@ -71,7 +75,10 @@ func (r *Resend) SendEmail(ctx context.Context, msg domain.EmailMessage) (id str
 		From:    r.fromEmail,
 		To:      []string{msg.To},
 		Subject: msg.Subject,
-		Html:    msg.Body,
+		Template: &resend.EmailTemplate{
+			Id:        msg.TemplateID,
+			Variables: msg.TemplateVariables,
+		},
 	}
 
 	// The key rides in an Idempotency-Key header on the POST. Resending the

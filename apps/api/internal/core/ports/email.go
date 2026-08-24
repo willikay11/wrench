@@ -15,7 +15,7 @@ type EmailDispatcher interface {
 // Driven — the write side of the outbox. Deliberately separate from
 // EmailOutbox so services that only enqueue cannot reach the dispatch side.
 type EmailQueue interface {
-	EnqueueEmail(ctx context.Context, to string, subject string, body string) error
+	EnqueueEmail(ctx context.Context, to string, subject string, templateId string, templateVariables map[string]any) error
 }
 
 // Driven — the read and status side of the outbox, used by the dispatcher.

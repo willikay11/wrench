@@ -23,14 +23,14 @@ func NewOutbox(db *pgxpool.Pool) *outboxRepo {
 }
 
 const enqueueEmailQuery = `
-	INSERT INTO emailOutbox (recipient, subject, body)
-	VALUES ($1, $2, $3)`
+	INSERT INTO emailOutbox (recipient, subject, templateId, templateVariables)
+	VALUES ($1, $2, $3, $4)`
 
-func (r *outboxRepo) EnqueueEmail(ctx context.Context, to string, subject string, body string) error {
+func (r *outboxRepo) EnqueueEmail(ctx context.Context, to string, subject string, templateId string, templateVariables map[string]any) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	_, err := from(ctx, r.db).Exec(ctx, enqueueEmailQuery, to, subject, body)
+	_, err := from(ctx, r.db).Exec(ctx, enqueueEmailQuery, to, subject, templateId, templateVariables)
 	if err != nil {
 		return fmt.Errorf("enqueue outbox email: %w", err)
 	}
@@ -47,7 +47,7 @@ const claimQuery = `
 		FOR UPDATE SKIP LOCKED
 		LIMIT $1
 	)
-	RETURNING id, recipient, subject, body, attempts`
+	RETURNING id, recipient, subject, COALESCE(templateId, ''), templateVariables, attempts`
 
 func (r *outboxRepo) ClaimPending(ctx context.Context, limit int) ([]domain.OutboxEmail, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -62,7 +62,7 @@ func (r *outboxRepo) ClaimPending(ctx context.Context, limit int) ([]domain.Outb
 	var emails []domain.OutboxEmail
 	for rows.Next() {
 		var email domain.OutboxEmail
-		if err := rows.Scan(&email.ID, &email.To, &email.Subject, &email.Body, &email.Attempts); err != nil {
+		if err := rows.Scan(&email.ID, &email.To, &email.Subject, &email.TemplateID, &email.TemplateVariables, &email.Attempts); err != nil {
 			return nil, fmt.Errorf("scan outbox email: %w", err)
 		}
 		emails = append(emails, email)

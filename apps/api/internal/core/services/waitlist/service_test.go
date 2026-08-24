@@ -21,18 +21,20 @@ type mockWaitlistRepository struct {
 }
 
 type mockEmailQueue struct {
-	enqueueEmailCalled  bool
-	enqueueEmailTo      string
-	enqueueEmailSubject string
-	enqueueEmailBody    string
-	enqueueEmailErr     error
+	enqueueEmailCalled            bool
+	enqueueEmailTo                string
+	enqueueEmailSubject           string
+	enqueueEmailTemplateId        string
+	enqueueEmailTemplateVariables map[string]any
+	enqueueEmailErr               error
 }
 
-func (m *mockEmailQueue) EnqueueEmail(ctx context.Context, to string, subject string, body string) error {
+func (m *mockEmailQueue) EnqueueEmail(ctx context.Context, to string, subject string, templateId string, templateVariables map[string]any) error {
+	m.enqueueEmailTemplateId = templateId
+	m.enqueueEmailTemplateVariables = templateVariables
 	m.enqueueEmailCalled = true
 	m.enqueueEmailTo = to
 	m.enqueueEmailSubject = subject
-	m.enqueueEmailBody = body
 	return m.enqueueEmailErr
 }
 

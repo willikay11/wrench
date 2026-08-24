@@ -67,10 +67,11 @@ func (s *service) DispatchPending(ctx context.Context) {
 		sentEmailId, sendErr := s.emailSender.SendEmail(ctx, domain.EmailMessage{
 			// The row ID is stable across retries of the same email, which is
 			// exactly what makes it usable as an idempotency key.
-			IdempotencyKey: email.ID,
-			To:             email.To,
-			Subject:        email.Subject,
-			Body:           email.Body,
+			IdempotencyKey:    email.ID,
+			To:                email.To,
+			Subject:           email.Subject,
+			TemplateID:        email.TemplateID,
+			TemplateVariables: email.TemplateVariables,
 		})
 
 		if sendErr == nil {

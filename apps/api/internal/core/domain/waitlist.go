@@ -10,4 +10,4 @@ type Waitlist struct {
 var ErrInvalidEmail = errors.New("invalid email")
 
 const WelcomeEmailSubject = "Welcome to the waitlist"
-const WelcomeEmailBody = "Thank you for joining the waitlist."
+const WelcomeEmailTemplateId = "welcome-to-wrench"
