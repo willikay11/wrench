@@ -5,14 +5,14 @@ const Feature = () => {
         <div id="features" className="grid grid-cols-12">
             <div className="col-start-2 col-span-10 md:col-start-4 md:col-span-6">
                 <div className="flex flex-col space-y-4 md:space-y-6 items-center my-12 md:my-20">
-                    <p className="font-mono uppercase text-sm text-primary">// what wrench does</p>
+                    <p className="font-mono uppercase text-sm text-primary">{"// what wrench does"}</p>
 
                     <div className="border-b-[1px] border-zinc-900 w-full pb-6">
                         <p className="text-lg md:text-xl text-white max-w-[640px]">
                         Every modification, logged.
                         </p>
                         <p className="mt-3 text-base md:text-lg text-zinc-500">
-                            The parts, the cost, the date, the photo. Your car's full history, not your memory of it.
+                            The parts, the cost, the date, the photo. Your car&apos;s full history, not your memory of it.
                         </p>
                     </div>
 

@@ -59,7 +59,7 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to connect to Redis")
 
 	}
-	defer redisClient.Close()
+	defer func() { _ = redisClient.Close() }()
 
 	// Custom client so the notifier can capture response status codes for
 	// permanent-vs-transient classification, and so sends actually time out.
@@ -86,14 +86,19 @@ func main() {
 
 	// Global middleware
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	// middleware.RealIP is deliberately not used: it rewrites r.RemoteAddr
+	// from client-controlled headers (X-Forwarded-For, True-Client-IP,
+	// X-Real-IP) whether or not our infrastructure sets them, so any per-IP
+	// rate limit built on it would be trivially bypassed. See GHSA-3fxj-6jh8-hvhx.
+	// When client IP is needed, parse X-Forwarded-For with a known count of
+	// trusted proxies in front (Kong, per ADR-008).
 	r.Use(middleware.Recoverer)
 
 	// Health check (no auth — Kong polls this)
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"ok","version":"%s"}`, cfg.Version)
+		_, _ = fmt.Fprintf(w, `{"status":"ok","version":"%s"}`, cfg.Version)
 	})
 
 	// API routes

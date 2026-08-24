@@ -18,18 +18,15 @@ describe('Navbar', () => {
 
     it('renders the navigation links in the navbar', () => {
         render(<Navbar />)
-        const featuresLink = screen.getByText(/Features/i)
-        const assistantLink = screen.getByText(/AI Assistant/i)
-        const contactLink = screen.getByText(/App/i)
 
-        expect(featuresLink).toBeInTheDocument()
-        expect(assistantLink).toBeInTheDocument()
-        expect(contactLink).toBeInTheDocument()
+        expect(screen.getByRole('link', { name: /What it does/i })).toHaveAttribute('href', '#features')
+        expect(screen.getByRole('link', { name: /Meet Rex/i })).toHaveAttribute('href', '#rex')
+        expect(screen.getByRole('link', { name: /Try it/i })).toHaveAttribute('href', '#try')
     })
 
-    it('renders the get started button in the navbar', () => {
+    it('renders the waitlist call to action in the navbar', () => {
         render(<Navbar />)
-        const getStartedButton = screen.getByRole('button', { name: /Get Started/i })
-        expect(getStartedButton).toBeInTheDocument()
+        const waitlistButton = screen.getByRole('button', { name: /Join the Waitlist/i })
+        expect(waitlistButton).toBeInTheDocument()
     })
 })

@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from "@/components/ui/button";
 import { CustomGrid } from "@/components/layout/customGrid";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowRight02Icon } from "@hugeicons/core-free-icons";
@@ -34,7 +33,7 @@ const ForBuilders = () => {
             <CustomGrid>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-10 py-24 items-center relative">
                     <div className="flex flex-col col-span-5 space-y-4 md:space-y-6">
-                        <p className="font-mono uppercase text-sm text-primary">// for every car builder</p>
+                        <p className="font-mono uppercase text-sm text-primary">{"// for every car builder"}</p>
                         <h1 className="text-3xl md:text-5xl font-semibold text-white max-w-[640px]">
                             You should not need five browser tabs to fix your own car.
                         </h1>
@@ -135,7 +134,7 @@ const ForBuilders = () => {
                                                 </div>
                                                 <span className="text-[#F5F5F5] text-[12px] font-medium">Rex</span>
                                             </div>
-                                            <p className="text-[#CCCCCC] text-[12px] leading-[1.5] m-0">With your JWT intake and Stage 2 tune, misfires above 12psi are almost always MAF calibration. But you're at 87K and haven't logged new plugs since the tune — VQ35s are sensitive here. Start with plugs before spending more on parts.</p>
+                                            <p className="text-[#CCCCCC] text-[12px] leading-[1.5] m-0">With your JWT intake and Stage 2 tune, misfires above 12psi are almost always MAF calibration. But you&apos;re at 87K and haven&apos;t logged new plugs since the tune — VQ35s are sensitive here. Start with plugs before spending more on parts.</p>
                                         </div>
 
                                         <span className="inline-block mt-3 border border-[#2A2A2A] text-[#AAAAAA] text-[11px] px-3 py-1.5 rounded-full">Log plugs →</span>

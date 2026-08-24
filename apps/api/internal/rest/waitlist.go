@@ -67,5 +67,8 @@ func (h *WaitlistHandler) CountWaitlist(w http.ResponseWriter, r *http.Request) 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(payload)
+	// The header is already written, so a failure here can only be logged.
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		log.Error().Err(err).Msg("Failed to encode JSON response")
+	}
 }
