@@ -86,6 +86,9 @@ func main() {
 
 	// Global middleware
 	r.Use(middleware.RequestID)
+	// Before Recoverer so a panic is logged as the 500 it turns into, and
+	// after RequestID so the id is available to log.
+	r.Use(rest.RequestLogger)
 	// middleware.RealIP is deliberately not used: it rewrites r.RemoteAddr
 	// from client-controlled headers (X-Forwarded-For, True-Client-IP,
 	// X-Real-IP) whether or not our infrastructure sets them, so any per-IP
