@@ -43,7 +43,7 @@ func (h *WaitlistHandler) JoinWaitlist(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, payload)
 			return
 		}
-		log.Error().Err(err).Str("email", request.Email).Msg("Failed to join waitlist")
+		log.Error().Err(err).Msg("Failed to join waitlist")
 		payload := map[string]string{"error": "Something went wrong"}
 		writeJSON(w, http.StatusInternalServerError, payload)
 		return
