@@ -12,6 +12,21 @@ set -eu
 : "${REDIS_PORT:=6379}"
 export REDIS_PORT
 
+# Kong's `url` shorthand needs a scheme. Without one it cannot split the value
+# into host and path, and fails with the far less obvious "in 'host': required
+# field missing / in 'path': should start with: /". Catch it here instead.
+case "${WRENCH_API_URL}" in
+  http://*|https://*) ;;
+  *)
+    echo "docker-entrypoint.sh: WRENCH_API_URL must start with http:// or https://" >&2
+    echo "  got:      ${WRENCH_API_URL}" >&2
+    echo "  expected: http://<service>.railway.internal:<port>" >&2
+    exit 1
+    ;;
+esac
+
+echo "docker-entrypoint.sh: upstream=${WRENCH_API_URL} redis=${REDIS_HOST}:${REDIS_PORT}"
+
 # Set here rather than inherited: the container runs as the unprivileged
 # `kong` user, and /kong/declarative is root-owned because the template is
 # COPYed in as root. An inherited KONG_DECLARATIVE_CONFIG pointing there — a
