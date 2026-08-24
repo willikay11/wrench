@@ -18,6 +18,8 @@ func (m *mockTxManager) WithinTransaction(ctx context.Context, fn func(ctx conte
 type mockWaitlistRepository struct {
 	savedWaitlist *domain.Waitlist
 	saveErr       error
+	count         int
+	countErr      error
 }
 
 type mockEmailQueue struct {
@@ -44,6 +46,13 @@ func (m *mockWaitlistRepository) Save(ctx context.Context, w *domain.Waitlist) e
 	}
 	m.savedWaitlist = w
 	return nil
+}
+
+func (m *mockWaitlistRepository) Count(ctx context.Context) (count int, err error) {
+	if m.countErr != nil {
+		return 0, m.countErr
+	}
+	return m.count, nil
 }
 
 func TestJoinWaitlist(t *testing.T) {
@@ -80,6 +89,37 @@ func TestJoinWaitlist(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedEmail, got.Email)
+		}
+
+	})
+}
+
+func TestCountWaitlist(t *testing.T) {
+	type testCase struct {
+		name          string
+		expectedCount int
+		wantErr       error
+	}
+
+	t.Run("should return a count of emails in the waitlist", func(t *testing.T) {
+		tests := []testCase{
+			{name: "at least 1 email in the waitlist", expectedCount: 151, wantErr: nil},
+			{name: "no emails in the waitlist", expectedCount: 0, wantErr: nil},
+			{name: "at least 200 emails in the waitlist", expectedCount: 200, wantErr: nil},
+		}
+
+		for _, tc := range tests {
+			mockRepo := &mockWaitlistRepository{
+				count: tc.expectedCount,
+			}
+			mockEmailQueue := &mockEmailQueue{}
+			mockTxManager := &mockTxManager{}
+			service := waitlist.NewService(mockRepo, mockEmailQueue, mockTxManager)
+
+			count, err := service.CountWaitlist(context.Background())
+
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedCount, count)
 		}
 
 	})
