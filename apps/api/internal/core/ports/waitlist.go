@@ -18,6 +18,7 @@ type WaitlistRepository interface {
 	Count(ctx context.Context) (int, error)
 }
 
-type WaitlistRedis interface {
+type WaitlistCache interface {
 	Count(ctx context.Context) (int, error)
+	IncreaseCount(ctx context.Context, currentCount int) error
 }

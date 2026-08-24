@@ -19,12 +19,12 @@ import (
 
 	"github.com/resend/resend-go/v3"
 
+	"github.com/willikay11/wrench/api/internal/cache"
 	"github.com/willikay11/wrench/api/internal/config"
 	emaildispatchsvc "github.com/willikay11/wrench/api/internal/core/services/emaildispatch"
 	waitlistsvc "github.com/willikay11/wrench/api/internal/core/services/waitlist"
 	"github.com/willikay11/wrench/api/internal/mailer"
 	"github.com/willikay11/wrench/api/internal/postgres"
-	"github.com/willikay11/wrench/api/internal/redis"
 	"github.com/willikay11/wrench/api/internal/rest"
 	"github.com/willikay11/wrench/api/internal/worker"
 )
@@ -54,14 +54,20 @@ func main() {
 	defer pool.Close()
 
 	// Redis client
-	redisClient := redis.Redis(startUpCtx, cfg.RedisURL)
+	redisClient, err := cache.Redis(startUpCtx, cfg.RedisURL)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to Redis")
+
+	}
+	defer redisClient.Close()
+
 	// Custom client so the notifier can capture response status codes for
 	// permanent-vs-transient classification, and so sends actually time out.
 	resendClient := resend.NewCustomClient(mailer.NewHTTPClient(15*time.Second), cfg.ResendAPIKey)
 
 	// Driven adapters
 	waitlistRepo := postgres.NewWaitlistRepository(pool)
-	waitlistRedis := redis.NewWaitlistRedis(redisClient)
+	waitlistRedis := cache.NewWaitlistRedis(redisClient)
 
 	emailOutbox := postgres.NewOutbox(pool)
 	emailSender := mailer.NewResend(resendClient, cfg.FromEmail)

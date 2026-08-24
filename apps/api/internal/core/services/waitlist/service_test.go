@@ -24,8 +24,10 @@ type mockWaitlistRepository struct {
 }
 
 type mockWaitlistRedis struct {
-	count    int
-	countErr error
+	savedCount int
+	saveErr    error
+	count      int
+	countErr   error
 }
 
 type mockEmailQueue struct {
@@ -66,6 +68,14 @@ func (m *mockWaitlistRedis) Count(ctx context.Context) (int, error) {
 		return 0, m.countErr
 	}
 	return m.count, nil
+}
+
+func (m *mockWaitlistRedis) IncreaseCount(ctx context.Context, w int) error {
+	if m.saveErr != nil {
+		return m.saveErr
+	}
+	m.savedCount = w
+	return nil
 }
 
 func TestJoinWaitlist(t *testing.T) {
