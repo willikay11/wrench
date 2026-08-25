@@ -32,7 +32,16 @@ ENV KONG_NGINX_WORKER_PROCESSES=2
 # Without trusting that hop, Kong sees every request as http from the edge's
 # own address and ignores the X-Forwarded-* headers it sets.
 ENV KONG_TRUSTED_IPS=0.0.0.0/0,::/0
-ENV KONG_REAL_IP_HEADER=X-Forwarded-Proto
+# X-Forwarded-For, not X-Forwarded-Proto: real_ip_header names the header
+# carrying the client IP. Pointed at a protocol header it yields no address,
+# so Kong falls back to the socket peer — Railway's edge — and every request
+# looks like it came from one client.
+ENV KONG_REAL_IP_HEADER=X-Forwarded-For
+# off = take the LAST entry in X-Forwarded-For, the one Railway's edge appends
+# and a client cannot forge. With trusted_ips=0.0.0.0/0, `on` would walk past
+# every trusted hop to the leftmost, client-supplied value — making per-IP
+# rate limits bypassable by sending your own X-Forwarded-For.
+ENV KONG_REAL_IP_RECURSIVE=off
 
 USER kong
 
