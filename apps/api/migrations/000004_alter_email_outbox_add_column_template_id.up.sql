@@ -1,0 +1,3 @@
+ALTER TABLE emailOutbox ADD COLUMN templateId VARCHAR(255) NULL;
+ALTER TABLE emailOutbox ADD COLUMN templateVariables JSONB NULL;
+ALTER TABLE emailOutbox DROP COLUMN body;

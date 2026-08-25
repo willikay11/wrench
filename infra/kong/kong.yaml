@@ -1,11 +1,22 @@
 # infra/kong/kong.yaml
+#
+# This file is a TEMPLATE. Kong does not expand ${VAR} in declarative config —
+# placeholders reach the parser as literal text, which is why an unrendered
+# copy fails with "in 'host': required field missing". docker-entrypoint.sh
+# renders it with envsubst before Kong ever reads it.
+#
+# Required environment variables:
+#   WRENCH_API_URL  full URL of the API service, e.g. http://api.railway.internal:8080
+#   REDIS_HOST      hostname ONLY, e.g. redis.railway.internal — not a redis:// URL
+#   REDIS_PORT      optional, defaults to 6379
+#   REDIS_PASSWORD  Redis password
 
 _format_version: "3.0"
 _transform: true
 
 services:
   - name: wrench-api
-    url: http://wrench.railway.internal:8080
+    url: "${WRENCH_API_URL}"
     connect_timeout: 10000
     read_timeout: 60000
     write_timeout: 60000
@@ -19,26 +30,50 @@ services:
         preserve_host: false
         protocols:
           - http
-          - https
+
+  # Answered by Kong itself via request-termination below, so it stays up
+  # even when the API is down. Railway's healthcheck points here: it should
+  # report on the gateway being deployed, not on its upstream.
+  - name: kong-health
+    url: http://localhost:8000
+    routes:
+      - name: kong-health-route
+        paths:
+          - /kong-health
+        strip_path: false
+        protocols:
+          - http
 
 plugins:
+  - name: request-termination
+    route: kong-health-route
+    config:
+      status_code: 200
+      content_type: application/json
+      body: '{"status":"ok","gateway":"kong"}'
+
   - name: rate-limiting
     config:
       hour: 1000
       policy: redis
-      # Updated: redis.host instead of redis_host
+      # Kong 3.4+ nests these under `redis` rather than the old redis_* keys.
+      # With policy: redis, Kong's entity-level check requires a valid
+      # redis.host — an unrendered placeholder here fails that check and
+      # surfaces as "failed conditional validation given value of field
+      # 'config.policy'".
       redis:
-        host: redis.railway.internal
-        port: 6379
+        host: "${REDIS_HOST}"
+        port: ${REDIS_PORT}
         username: default
-        password: $(KONG_REDIS_PASSWORD)
+        password: "${REDIS_PASSWORD}"
       hide_client_headers: true
       fault_tolerant: true
 
   - name: cors
     config:
       origins:
-        - https://wrench.ai
+        - https://wrench.it.com
+        - https://staging.wrench.it.com
         - http://localhost:3000
       methods:
         - GET

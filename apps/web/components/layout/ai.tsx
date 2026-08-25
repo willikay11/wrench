@@ -10,12 +10,12 @@ const AI = () => {
         <div id="rex" className="grid grid-cols-12">
             <div className="col-start-2 col-span-10 md:col-start-3 md:col-span-8">
                 <div className="flex flex-col space-y-4 md:space-y-12 items-center my-12 md:my-20">
-                    <p className="font-mono uppercase text-sm text-primary">// MEET REX</p>
+                    <p className="font-mono uppercase text-sm text-primary">{"// MEET REX"}</p>
 
                     <div className="space-y-6 text-center">
                         <p className="text-2xl md:text-5xl text-white font-semibold">It already knows your car.</p>
                         <p className="mt-2 text-base md:text-lg text-zinc-500 text-center max-w-[640px]">
-                            Rex is your AI crew chief. It knows your car's specific build, and it knows how to help you get the work done.
+                            Rex is your AI crew chief. It knows your car&apos;s specific build, and it knows how to help you get the work done.
                         </p>
                     </div>
 

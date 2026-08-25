@@ -82,6 +82,26 @@ value:  integer counter
 TTL:    15 minutes
 ```
 
+**Waitlist count cache:**
+```
+key:   waitlist:count
+value: integer count of waitlist signups
+TTL:   5 minutes
+population: read-through. GET /v1/waitlist/count
+            reads Redis; on a miss it falls back
+            to a Postgres COUNT(*) and repopulates
+            the key for the next reader.
+refresh: set after a successful signup, once the
+         enclosing Postgres transaction has
+         committed. Never written from inside the
+         transaction — a rollback cannot undo a
+         Redis write.
+```
+
+This key is public and unauthenticated, which is
+why it is cached at all: without it, every hit on
+the marketing page's counter reaches Postgres.
+
 ### Cache invalidation strategy
 Cache invalidation follows the cache-aside pattern:
 
@@ -94,6 +114,19 @@ Cache invalidation follows the cache-aside pattern:
 Invalidation on write (delete then repopulate)
 is used instead of update-on-write to avoid
 race conditions between concurrent writes.
+
+**Known deviation — waitlist:count.** The signup
+path currently sets this key to the freshly
+queried count rather than deleting it. Two
+concurrent signups can therefore interleave so
+that the lower count is written last, leaving the
+cache below the true value until the 5-minute TTL
+expires. The value is cosmetic (a marketing
+counter) and self-heals, so this is accepted for
+now. Switching the refresh to a DELETE would bring
+it in line with the rule above and remove the race
+entirely, at the cost of one extra COUNT(*) on the
+next read.
 
 ### What is deliberately NOT cached
 - AI chat responses: must always reflect the

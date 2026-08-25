@@ -24,6 +24,20 @@ const Chat = () => {
     const [streamedAnswer, setStreamedAnswer] = useState<string>("");
     const [isStreaming, setIsStreaming] = useState<boolean>(false);
     const [showJoinWaitlist, setShowJoinWaitlist] = useState<boolean>(false);
+    // Bumped on every ask so that re-clicking the same question replays the
+    // animation — `question` alone would not change, so the effect would not
+    // re-run and the cleared answer would never refill.
+    const [askCount, setAskCount] = useState<number>(0);
+
+    // Resetting here rather than inside the effect: this is an event, and
+    // setting state synchronously in an effect body causes a cascading render.
+    const askQuestion = (nextQuestion: string) => {
+        setQuestion(nextQuestion);
+        setStreamedAnswer("");
+        setIsStreaming(true);
+        setShowJoinWaitlist(false);
+        setAskCount((n) => n + 1);
+    };
 
     useEffect(() => {
         if (!question) return;
@@ -32,9 +46,6 @@ const Chat = () => {
         const words = answer.split(" ");
         let index = 0;
         let interval: ReturnType<typeof setInterval>;
-
-        setStreamedAnswer("");
-        setIsStreaming(true);
 
         // Simulate the backend "thinking" before the first token arrives.
         const startTimeout = setTimeout(() => {
@@ -53,13 +64,13 @@ const Chat = () => {
             clearTimeout(startTimeout);
             clearInterval(interval);
         };
-    }, [question]);
+    }, [question, askCount]);
 
     return (
         <div id="try" className="grid grid-cols-12">
             <div className="col-start-2 col-span-10 md:col-start-3 md:col-span-8">
                 <div className="flex flex-col space-y-4 md:space-y-12 items-center my-12 md:my-20">
-                    <p className="font-mono uppercase text-sm text-primary">// TRY IT NOW</p>
+                    <p className="font-mono uppercase text-sm text-primary">{"// TRY IT NOW"}</p>
 
                     <div className="space-y-6 text-center">
                         <p className="text-2xl md:text-5xl text-white font-semibold">Ask Rex anything about a project car.</p>
@@ -80,7 +91,7 @@ const Chat = () => {
                                     <p className="text-neutral-600 text-center mt-4">Ask a question to start the conversation</p>
                                     <div className="inline-flex gap-2">
                                         {qa.map((item, index) => (
-                                            <Button key={index} variant="outline" className="rounded-full text-xs px-4 py-2 !bg-[#0A0A0A]" onClick={() => setQuestion(item.question)}>{item.question}</Button>
+                                            <Button key={index} variant="outline" className="rounded-full text-xs px-4 py-2 !bg-[#0A0A0A]" onClick={() => askQuestion(item.question)}>{item.question}</Button>
                                         ))}
                                     </div>
                                 </div>
@@ -113,7 +124,7 @@ const Chat = () => {
 
                                     {showJoinWaitlist && (
                                         <div className="rounded-md border border-zinc-700 p-4 mt-4 bg-[#0A0A0A]">
-                                            <p className="text-xs text-zinc-500 text-center">You've seen what Rex can do with your car's context. Join the waitlist to add your own car and get answers that know your actual build.</p>
+                                            <p className="text-xs text-zinc-500 text-center">You&apos;ve seen what Rex can do with your car&apos;s context. Join the waitlist to add your own car and get answers that know your actual build.</p>
                                             <JoinWaitlistButton className="mt-4 w-full" />
                                         </div>
                                     )}

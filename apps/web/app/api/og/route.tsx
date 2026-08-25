@@ -20,6 +20,9 @@ export async function GET(req: NextRequest) {
           padding: "80px",
         }}
       >
+        {/* next/image cannot be used inside ImageResponse — Satori renders
+            plain <img> only. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`${origin}/logo.svg`}
           width={240}

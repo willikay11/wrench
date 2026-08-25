@@ -1,0 +1,113 @@
+name: Mentor review
+
+# Only when a PR is opened — not on every push to the branch.
+# Adding `synchronize` here would re-run (and re-comment) on every commit,
+# which burns API quota and buries the original review.
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: Senior mentor review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Full history so the base branch exists locally for the diff below.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/mentor/package-lock.json
+
+      - name: Install mentor dependencies
+        working-directory: tools/mentor
+        run: npm ci
+
+      - name: Build the PR diff
+        run: |
+          git diff --unified=3 \
+            "origin/${{ github.base_ref }}...HEAD" \
+            -- "*.ts" "*.tsx" "*.go" "*.sql" "*.css" "*.json" \
+            > "${{ github.workspace }}/mentor.diff"
+          echo "diff bytes: $(wc -c < "${{ github.workspace }}/mentor.diff")"
+
+      - name: Run mentor review
+        working-directory: tools/mentor
+        env:
+          # The tool's CI mode: take the branch and diff from the environment
+          # rather than from the local git checkout, which on a PR event is a
+          # detached merge commit with no usable branch name.
+          MENTOR_CI_MODE: "true"
+          MENTOR_BRANCH: ${{ github.head_ref }}
+          MENTOR_DIFF_PATH: ${{ github.workspace }}/mentor.diff
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+        # --no-block so a low score comments rather than failing the check.
+        run: >
+          npx tsx src/index.ts review
+          --no-block
+          --output-json=${{ github.workspace }}/mentor-review.json
+
+      - name: Post the review as a PR comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = `${process.env.GITHUB_WORKSPACE}/mentor-review.json`;
+
+            if (!fs.existsSync(path)) {
+              // No issue ID in the branch name, or the review errored — the
+              // tool exits 0 in both cases. Nothing to post.
+              core.info('No review output; skipping comment.');
+              return;
+            }
+
+            const r = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const list = (items) =>
+              items?.length ? items.map((i) => `- ${i}`).join('\n') : '_none_';
+
+            const body = [
+              `## Mentor review — ${r.overallScore}/10`,
+              '',
+              r.verdict,
+              '',
+              '| Dimension | Score |',
+              '| --- | --- |',
+              `| Task completion | ${r.scores.taskCompletion}/10 |`,
+              `| Code quality | ${r.scores.codeQuality}/10 |`,
+              `| Security | ${r.scores.security}/10 |`,
+              `| Testing | ${r.scores.testing}/10 |`,
+              `| Senior signals | ${r.scores.seniorSignals}/10 |`,
+              '',
+              '### Blockers',
+              list(r.blockers),
+              '',
+              '### Warnings',
+              list(r.warnings),
+              '',
+              '### Done well',
+              list(r.passed),
+              '',
+              '### Next steps',
+              list(r.nextSteps),
+              '',
+              r.seniorTip ? `> **Senior tip:** ${r.seniorTip}` : '',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
