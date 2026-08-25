@@ -88,6 +88,12 @@ plugins:
   - name: rate-limiting
     config:
       hour: 1000
+      # Per client IP, per ADR-008's "coarse, perimeter" split. Not
+      # limit_by: consumer — there is one consumer (wrench-web) for the whole
+      # frontend, so that would be a single bucket shared by every visitor.
+      # Per-user limits need to know the user, which Kong deliberately does
+      # not: see ADR-008 "Rate limiting split".
+      limit_by: ip
       policy: redis
       # Kong 3.4+ nests these under `redis` rather than the old redis_* keys.
       # With policy: redis, Kong's entity-level check requires a valid
