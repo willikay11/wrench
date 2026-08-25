@@ -9,6 +9,7 @@ set -eu
 : "${WRENCH_API_URL:?WRENCH_API_URL must be set, e.g. http://api.railway.internal:8080}"
 : "${REDIS_HOST:?REDIS_HOST must be a hostname only, e.g. redis.railway.internal (not a redis:// URL)}"
 : "${REDIS_PASSWORD:?REDIS_PASSWORD must be set}"
+: "${CHANNEL_TOKEN:?CHANNEL_TOKEN must be set — the X-Channel-Token value Kong accepts}"
 : "${REDIS_PORT:=6379}"
 export REDIS_PORT
 
@@ -37,7 +38,7 @@ KONG_DECLARATIVE_CONFIG=/tmp/kong.yaml
 export KONG_DECLARATIVE_CONFIG
 
 # Named explicitly so envsubst leaves every other $ in the file alone.
-envsubst '${WRENCH_API_URL} ${REDIS_HOST} ${REDIS_PORT} ${REDIS_PASSWORD}' \
+envsubst '${WRENCH_API_URL} ${REDIS_HOST} ${REDIS_PORT} ${REDIS_PASSWORD} ${CHANNEL_TOKEN}' \
   < /kong/declarative/kong.yaml.template \
   > "${KONG_DECLARATIVE_CONFIG}"
 

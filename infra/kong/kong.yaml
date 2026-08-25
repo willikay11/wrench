@@ -22,9 +22,19 @@ services:
     write_timeout: 60000
 
     routes:
+      # Channel-token protected — key-auth is scoped to this route below.
       - name: api-routes
         paths:
           - /v1
+        strip_path: false
+        preserve_host: false
+        protocols:
+          - http
+
+      # Deliberately unauthenticated: uptime monitoring and any external
+      # prober must reach it without holding a credential.
+      - name: health-route
+        paths:
           - /health
         strip_path: false
         preserve_host: false
@@ -44,7 +54,30 @@ services:
         protocols:
           - http
 
+# The channel token per ADR-008. One consumer for now — the Next.js frontend.
+# Adding a second consumer later (a mobile client, a partner) is another entry
+# here with its own key, which makes revocation per-client.
+consumers:
+  - username: wrench-web
+    keyauth_credentials:
+      - key: "${CHANNEL_TOKEN}"
+
 plugins:
+  - name: key-auth
+    route: api-routes
+    config:
+      key_names:
+        - X-Channel-Token
+      # Header only. Kong accepts the key in the query string by default,
+      # which would write it into access logs, browser history and Referer
+      # headers on every request.
+      key_in_header: true
+      key_in_query: false
+      key_in_body: false
+      # Strip the header before proxying — the Go API has no use for it and
+      # it should not appear in upstream logs.
+      hide_credentials: true
+
   - name: request-termination
     route: kong-health-route
     config:
