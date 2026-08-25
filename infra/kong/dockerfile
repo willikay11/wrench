@@ -28,6 +28,12 @@ ENV KONG_PROXY_ERROR_LOG=/dev/stderr
 ENV KONG_ADMIN_ERROR_LOG=/dev/stderr
 ENV KONG_NGINX_WORKER_PROCESSES=2
 
+# Kong sits behind Railway's edge, which terminates TLS and forwards plaintext.
+# Without trusting that hop, Kong sees every request as http from the edge's
+# own address and ignores the X-Forwarded-* headers it sets.
+ENV KONG_TRUSTED_IPS=0.0.0.0/0,::/0
+ENV KONG_REAL_IP_HEADER=X-Forwarded-Proto
+
 USER kong
 
 EXPOSE 8000 8001
