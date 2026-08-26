@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Configuration01Icon } from "@hugeicons/core-free-icons";
 
+import { AuthStatusToast } from "@/components/auth/authStatusToast";
 import { GoogleSignInButton } from "@/components/auth/googleSignInButton";
 import type { GoogleSignInIntent } from "@/lib/auth/google";
 
@@ -26,6 +28,12 @@ const AuthPanel = ({
     switchHref,
 }: AuthPanelProps) => (
     <div className="flex flex-col justify-center px-6 py-16 sm:px-12 lg:px-16">
+        {/* Reads the callback's ?auth= status. Suspended because useSearchParams
+            would otherwise opt both pages out of static rendering. */}
+        <Suspense fallback={null}>
+            <AuthStatusToast />
+        </Suspense>
+
         <div className="mx-auto w-full max-w-sm">
             {/* The rail carries the wordmark from `lg` up; below that this is
                 the only branding on the screen. */}

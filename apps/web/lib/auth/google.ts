@@ -1,34 +1,43 @@
 /**
- * The single seam between the sign-in UI and Google OAuth.
+ * The single seam between the sign-in UI and the OAuth flow.
  *
- * The API (apps/api) has no auth endpoints yet, so nothing here can start a
- * real flow. When they land, `startGoogleSignIn` becomes a redirect to the
- * backend's authorize endpoint and every caller stays as it is.
+ * The flow itself runs in route handlers under /api/auth/google, so the client
+ * secret and the Google ID token stay on the server. All the browser does is
+ * hand itself over to them and read the outcome back off the URL.
  */
 
-/** Which screen the user started from, so the backend can route them back. */
+/** Which screen the user started from, so the callback can route them back. */
 type GoogleSignInIntent = "signup" | "login";
 
-type GoogleSignInResult =
-    /** The browser is on its way to Google; the caller should stay disabled. */
-    | { status: "redirecting" }
-    /** Nothing to redirect to yet; the caller should say so and re-enable. */
-    | { status: "unavailable" };
+/**
+ * What a finished round trip reports to the page that started it.
+ *
+ * `pending` means Google authenticated the user and we hold an ID token —
+ * there is simply nowhere to exchange it for a session yet.
+ */
+type AuthStatus = "pending" | "cancelled" | "error";
+
+/** The query parameter the callback lands on, read once and then stripped. */
+const AUTH_STATUS_PARAM = "auth";
+
+const isGoogleSignInIntent = (value: unknown): value is GoogleSignInIntent =>
+    value === "signup" || value === "login";
+
+const isAuthStatus = (value: unknown): value is AuthStatus =>
+    value === "pending" || value === "cancelled" || value === "error";
+
+/** Where each intent started, and so where the callback sends the user back. */
+const authPagePath = (intent: GoogleSignInIntent) => (intent === "login" ? "/login" : "/signup");
 
 /**
- * Flip to true once the backend serves the authorize endpoint. Kept as a
- * constant rather than an env var so the dead branch is obvious in review.
+ * Hands the browser to our authorize route.
+ *
+ * The navigation is the whole function: callers should leave their button in
+ * its loading state rather than re-enable, because the page is on its way out.
  */
-const GOOGLE_SIGN_IN_ENABLED = false;
-
-const startGoogleSignIn = async (intent: GoogleSignInIntent): Promise<GoogleSignInResult> => {
-    if (!GOOGLE_SIGN_IN_ENABLED) return { status: "unavailable" };
-
-    // Real implementation, once /v1/auth/google exists:
-    // window.location.assign(`${apiBaseUrl}/v1/auth/google?intent=${intent}`);
-    void intent;
-    return { status: "redirecting" };
+const startGoogleSignIn = (intent: GoogleSignInIntent): void => {
+    window.location.assign(`/api/auth/google/start?intent=${intent}`);
 };
 
-export { startGoogleSignIn, GOOGLE_SIGN_IN_ENABLED };
-export type { GoogleSignInIntent, GoogleSignInResult };
+export { startGoogleSignIn, isGoogleSignInIntent, isAuthStatus, authPagePath, AUTH_STATUS_PARAM };
+export type { GoogleSignInIntent, AuthStatus };

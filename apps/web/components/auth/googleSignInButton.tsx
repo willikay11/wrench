@@ -4,26 +4,17 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { GoogleMark } from "@/components/auth/googleMark";
-import { toastInfo } from "@/lib/toast";
 import { startGoogleSignIn, type GoogleSignInIntent } from "@/lib/auth/google";
 
 const GoogleSignInButton = ({ intent, label }: { intent: GoogleSignInIntent; label: string }) => {
     const [isPending, setIsPending] = useState(false);
 
-    const onClick = async () => {
+    const onClick = () => {
+        // Stays true for the life of the page: the next thing that happens is
+        // a full navigation to Google, and re-enabling would only invite a
+        // second click that starts a second handshake.
         setIsPending(true);
-        const result = await startGoogleSignIn(intent);
-
-        if (result.status === "redirecting") {
-            // The browser is leaving; re-enabling would only flash the button.
-            return;
-        }
-
-        setIsPending(false);
-        toastInfo({
-            title: "Google sign-in is not open yet",
-            description: "Accounts open with early access. Join the waitlist and we will let you know.",
-        });
+        startGoogleSignIn(intent);
     };
 
     return (

@@ -1,7 +1,15 @@
 import { render } from '@testing-library/react'
 import { screen } from '@testing-library/dom'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { AuthPanel } from './authPanel'
+
+// The panel mounts AuthStatusToast, which reads the router. Its own behaviour
+// is covered in authStatusToast.test.tsx; here it just needs to not throw.
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({ replace: vi.fn() }),
+    usePathname: () => '/signup',
+    useSearchParams: () => new URLSearchParams(),
+}))
 
 const renderSignup = () =>
     render(
