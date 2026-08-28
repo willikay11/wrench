@@ -5,8 +5,8 @@ CREATE TABLE useridentities (
     providerEmail VARCHAR NOT NULL,
     providerData JSONB,
     providerUserId VARCHAR,
-    createdAt TIMESTAMPTZ NOT NULL,
-    updatedAt TIMESTAMPTZ NOT NULL,
+    createdAt TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updatedAt TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT UC_PROVIDER_USER UNIQUE(provider,providerUserId),
     CONSTRAINT fk_user_identity FOREIGN KEY (userId) REFERENCES users(id)
 );

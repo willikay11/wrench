@@ -4,7 +4,8 @@ CREATE TABLE users (
     avatarUrl TEXT,
     email VARCHAR UNIQUE,
     status VARCHAR NOT NULL,
-    lastLogin TIMESTAMPTZ NOT NULL,
-    createdAt TIMESTAMPTZ NOT NULL,
-    updatedAt TIMESTAMPTZ NOT NULL
+    lastLogin TIMESTAMPTZ,
+    emailVerified BOOL DEFAULT false,
+    createdAt TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updatedAt TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

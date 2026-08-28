@@ -40,6 +40,10 @@ type Config struct {
 	EmailTickTimeout  time.Duration
 	EmailBatchSize    int
 	EmailStaleAfter   time.Duration
+
+	// GOOGLE OAUTH2
+	GoogleClientId     string
+	GoogleClientSecret string
 }
 
 func Load() (*Config, error) {
@@ -53,15 +57,17 @@ func Load() (*Config, error) {
 
 	// Required variables — missing any = refuse to start
 	required := map[string]*string{
-		"DATABASE_URL":   &cfg.DatabaseURL,
-		"REDIS_URL":      &cfg.RedisURL,
-		"JWT_SECRET":     &cfg.JWTSecret,
-		"CLOUDINARY_URL": &cfg.CloudinaryURL,
-		"CLAUDE_API_KEY": &cfg.ClaudeAPIKey,
-		"OPENAI_API_KEY": &cfg.OpenAIAPIKey,
-		"RESEND_API_KEY": &cfg.ResendAPIKey,
-		"CHANNEL_TOKEN":  &cfg.ChannelToken,
-		"FROM_EMAIL":     &cfg.FromEmail,
+		"DATABASE_URL":         &cfg.DatabaseURL,
+		"REDIS_URL":            &cfg.RedisURL,
+		"JWT_SECRET":           &cfg.JWTSecret,
+		"CLOUDINARY_URL":       &cfg.CloudinaryURL,
+		"CLAUDE_API_KEY":       &cfg.ClaudeAPIKey,
+		"OPENAI_API_KEY":       &cfg.OpenAIAPIKey,
+		"RESEND_API_KEY":       &cfg.ResendAPIKey,
+		"CHANNEL_TOKEN":        &cfg.ChannelToken,
+		"FROM_EMAIL":           &cfg.FromEmail,
+		"GOOGLE_CLIENT_ID":     &cfg.GoogleClientId,
+		"GOOGLE_CLIENT_SECRET": &cfg.GoogleClientSecret,
 	}
 
 	var missing []string

@@ -62,6 +62,7 @@ const GET = async (request: NextRequest) => {
     }
 
     const code = params.get("code");
+    console.log("code: ", code, "verifier", handshake.verifier)
 
     if (!code) {
         console.error("google oauth: callback carried no authorization code");
@@ -75,26 +76,27 @@ const GET = async (request: NextRequest) => {
         return finish("error");
     }
 
-    const exchange = await exchangeCodeForIdToken({
-        config,
-        code,
-        verifier: handshake.verifier,
-        redirectUri: resolveRedirectUri(request),
-    });
+    // const session = await exchangeGoogleCode({ code, verifier: handshake.verifier });
+    // const exchange = await exchangeCodeForIdToken({
+    //     config,
+    //     code,
+    //     verifier: handshake.verifier,
+    //     redirectUri: resolveRedirectUri(request),
+    // });
 
-    if (exchange.status === "failed") {
-        console.error("google oauth: code exchange failed", { reason: exchange.reason });
-        return finish("error");
-    }
+    // if (exchange.status === "failed") {
+    //     console.error("google oauth: code exchange failed", { reason: exchange.reason });
+    //     return finish("error");
+    // }
 
     // We hold a Google ID token. Handing it on is the seam the API task fills;
     // until then the only honest thing to tell the user is that they are
     // authenticated and accounts are not open.
-    const handoff = await exchangeGoogleIdToken(exchange.idToken);
+    // const handoff = await exchangeGoogleIdToken(exchange.idToken);
 
-    if (handoff.status === "not_implemented") return finish("pending");
+    // if (handoff.status === "not_implemented") return finish("pending");
 
-    return finish("error");
+    return finish("pending");
 };
 
 export { GET };
