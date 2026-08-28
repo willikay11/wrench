@@ -146,8 +146,8 @@ describe('readOAuthConfig', () => {
 
 describe('redirectToAuthPage', () => {
     it('sends each intent back where it started, carrying the status', () => {
-        expect(redirectToAuthPage(request(), 'signup', 'pending').headers.get('location')).toBe(
-            'http://localhost:3000/signup?auth=pending',
+        expect(redirectToAuthPage(request(), 'signup', 'welcome').headers.get('location')).toBe(
+            'http://localhost:3000/signup?auth=welcome',
         )
         expect(redirectToAuthPage(request(), 'login', 'cancelled').headers.get('location')).toBe(
             'http://localhost:3000/login?auth=cancelled',

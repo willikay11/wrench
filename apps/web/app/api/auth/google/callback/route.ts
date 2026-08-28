@@ -1,13 +1,18 @@
 import { type NextRequest } from "next/server";
 
 import type { AuthStatus } from "@/lib/auth/google";
-import { exchangeGoogleIdToken } from "@/lib/auth/exchange";
+import { exchangeGoogleCode } from "@/lib/auth/exchange";
+import {
+    ACCESS_HANDOFF_COOKIE,
+    ACCESS_HANDOFF_MAX_AGE_SECONDS,
+    REFRESH_TOKEN_COOKIE,
+    REFRESH_TOKEN_MAX_AGE_SECONDS,
+    SESSION_ENDPOINT,
+    type AuthResponse,
+} from "@/lib/auth/session";
 import {
     decodeHandshake,
-    exchangeCodeForIdToken,
-    readOAuthConfig,
     redirectToAuthPage,
-    resolveRedirectUri,
     stateMatches,
     OAUTH_COOKIE_PATH,
     OAUTH_HANDSHAKE_COOKIE,
@@ -16,9 +21,9 @@ import {
 /**
  * Step two: Google sends the user back here with an authorization code.
  *
- * Every path out of this handler is a redirect to the page the user started
- * on, carrying only a status. Nothing renders here, so a failure can never
- * strand the user on a blank callback URL.
+ * The code goes to the API, which exchanges it with Google, verifies the ID
+ * token and returns a Wrench session. Every path out is a redirect carrying
+ * only a status — no token has ever appeared in a URL.
  */
 const GET = async (request: NextRequest) => {
     const handshake = decodeHandshake(request.cookies.get(OAUTH_HANDSHAKE_COOKIE)?.value);
@@ -27,11 +32,44 @@ const GET = async (request: NextRequest) => {
     const intent = handshake?.intent ?? "signup";
     const params = request.nextUrl.searchParams;
 
-    const finish = (status: AuthStatus) => {
+    const finish = (status: AuthStatus, session?: AuthResponse) => {
         const response = redirectToAuthPage(request, intent, status);
         // Single-use whatever the outcome: leaving it set would let a replayed
         // callback URL reuse the verifier.
         response.cookies.delete({ name: OAUTH_HANDSHAKE_COOKIE, path: OAUTH_COOKIE_PATH });
+
+        if (!session) return response;
+
+        const secure = process.env.NODE_ENV === "production";
+
+        // The only part of the session that survives a page load.
+        response.cookies.set(REFRESH_TOKEN_COOKIE, session.refreshToken, {
+            httpOnly: true,
+            secure,
+            sameSite: "lax",
+            path: "/",
+            maxAge: REFRESH_TOKEN_MAX_AGE_SECONDS,
+        });
+
+        // The access token's single hop to the client, scoped to the one route
+        // that reads it and deletes it. See lib/auth/session.ts.
+        response.cookies.set(
+            ACCESS_HANDOFF_COOKIE,
+            Buffer.from(
+                JSON.stringify({
+                    accessToken: session.accessToken,
+                    expiresIn: session.expiresIn,
+                    user: session.user,
+                }),
+            ).toString("base64url"),
+            {
+                httpOnly: true,
+                secure,
+                sameSite: "lax",
+                path: SESSION_ENDPOINT,
+                maxAge: ACCESS_HANDOFF_MAX_AGE_SECONDS,
+            },
+        );
 
         return response;
     };
@@ -55,48 +93,24 @@ const GET = async (request: NextRequest) => {
     }
 
     if (!stateMatches(handshake.state, params.get("state"))) {
-        // A forged callback. Return before the code is touched: exchanging it
-        // is the step that would mint a session for an attacker's account.
+        // A forged callback. Return before the code is spent: exchanging it is
+        // the step that would mint a session for an attacker's account.
         console.error("google oauth: state did not match the handshake");
         return finish("error");
     }
 
     const code = params.get("code");
-    console.log("code: ", code, "verifier", handshake.verifier)
 
     if (!code) {
         console.error("google oauth: callback carried no authorization code");
         return finish("error");
     }
 
-    const config = readOAuthConfig();
+    const exchange = await exchangeGoogleCode({ code, verifier: handshake.verifier });
 
-    if (!config) {
-        console.error("google oauth: GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not configured");
-        return finish("error");
-    }
+    if (exchange.status === "failed") return finish("error");
 
-    // const session = await exchangeGoogleCode({ code, verifier: handshake.verifier });
-    // const exchange = await exchangeCodeForIdToken({
-    //     config,
-    //     code,
-    //     verifier: handshake.verifier,
-    //     redirectUri: resolveRedirectUri(request),
-    // });
-
-    // if (exchange.status === "failed") {
-    //     console.error("google oauth: code exchange failed", { reason: exchange.reason });
-    //     return finish("error");
-    // }
-
-    // We hold a Google ID token. Handing it on is the seam the API task fills;
-    // until then the only honest thing to tell the user is that they are
-    // authenticated and accounts are not open.
-    // const handoff = await exchangeGoogleIdToken(exchange.idToken);
-
-    // if (handoff.status === "not_implemented") return finish("pending");
-
-    return finish("pending");
+    return finish(exchange.status === "created" ? "welcome" : "signed-in", exchange.session);
 };
 
 export { GET };

@@ -1,8 +1,9 @@
 import { render, waitFor } from '@testing-library/react'
 import { screen } from '@testing-library/dom'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import { Toaster } from '@/components/ui/sonner'
+import { SessionProvider } from '@/components/auth/sessionProvider'
 import { AuthStatusToast } from './authStatusToast'
 
 const replace = vi.fn()
@@ -14,32 +15,76 @@ vi.mock('next/navigation', () => ({
     useSearchParams: () => params,
 }))
 
+const SESSION = {
+    accessToken: 'the-access-token',
+    expiresIn: 900,
+    user: {
+        id: '11111111-1111-1111-1111-111111111111',
+        email: 'someone@example.com',
+        displayName: 'Kamau',
+        avatarUrl: 'https://example.com/a.png',
+        emailVerified: true,
+    },
+}
+
+const fetchMock = vi.fn()
+
 const renderWith = (search: string) => {
     params = new URLSearchParams(search)
+
     return render(
-        <>
+        <SessionProvider>
             <Toaster />
             <AuthStatusToast />
-        </>,
+        </SessionProvider>,
     )
 }
 
 describe('AuthStatusToast', () => {
     beforeEach(() => {
         replace.mockClear()
+        fetchMock.mockReset()
+        fetchMock.mockResolvedValue(
+            new Response(JSON.stringify(SESSION), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            }),
+        )
+        vi.stubGlobal('fetch', fetchMock)
     })
 
-    it('confirms a completed sign-in and says why nothing happens yet', async () => {
-        renderWith('auth=pending')
+    afterEach(() => {
+        vi.unstubAllGlobals()
+    })
+
+    it('greets a new account by name', async () => {
+        renderWith('auth=welcome')
 
         await waitFor(() => {
-            expect(screen.getByText(/Signed in with Google/i)).toBeInTheDocument()
+            expect(screen.getByText(/Welcome to Wrench, Kamau/i)).toBeInTheDocument()
         })
-        expect(screen.getByText(/Accounts open with early access/i)).toBeInTheDocument()
     })
 
-    // Backing out of the consent screen is a decision. Telling the user
-    // something went wrong would be a lie.
+    it('greets a returning user differently', async () => {
+        renderWith('auth=signed-in')
+
+        await waitFor(() => {
+            expect(screen.getByText(/Welcome back, Kamau/i)).toBeInTheDocument()
+        })
+    })
+
+    // The greeting waits on the handoff. If it fired first the user would be
+    // welcomed by no name at all, which reads as a bug.
+    it('still greets when the handoff returns nothing', async () => {
+        fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
+        renderWith('auth=welcome')
+
+        await waitFor(() => {
+            expect(screen.getByText(/Welcome to Wrench/i)).toBeInTheDocument()
+        })
+        expect(screen.queryByText(/,/)).not.toBeInTheDocument()
+    })
+
     it('reports a cancelled sign-in without calling it a failure', async () => {
         renderWith('auth=cancelled')
 
@@ -61,7 +106,7 @@ describe('AuthStatusToast', () => {
     // Otherwise a refresh or a shared link replays a toast about something
     // that already happened.
     it('strips the status from the URL once it has been shown', async () => {
-        renderWith('auth=pending')
+        renderWith('auth=welcome')
 
         await waitFor(() => {
             expect(replace).toHaveBeenCalledWith('/signup', { scroll: false })
@@ -69,13 +114,19 @@ describe('AuthStatusToast', () => {
     })
 
     it('stays silent with no status, or one it does not recognise', async () => {
+        // Waiting for the handoff to settle first, so this asserts silence
+        // rather than just outrunning the session load.
+        const settled = () => waitFor(() => expect(fetchMock).toHaveBeenCalled())
+
         const { unmount } = renderWith('')
-        expect(screen.queryByText(/Signed in with Google/i)).not.toBeInTheDocument()
+        await settled()
+        expect(screen.queryByText(/Welcome/i)).not.toBeInTheDocument()
         expect(replace).not.toHaveBeenCalled()
         unmount()
 
         renderWith('auth=whatever')
-        expect(screen.queryByText(/Signed in with Google/i)).not.toBeInTheDocument()
+        await settled()
+        expect(screen.queryByText(/Welcome/i)).not.toBeInTheDocument()
         expect(replace).not.toHaveBeenCalled()
     })
 })
