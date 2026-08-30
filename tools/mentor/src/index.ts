@@ -29,6 +29,7 @@ async function main(): Promise<void> {
   const verbose         = args.includes('--verbose')
   const diffLastCommit  = args.includes('--diff-last-commit')
   const diffMain        = args.includes('--diff-main')
+  const diffBranch      = args.includes('--diff-branch')
   const outputJsonPath  = args.find((a) => a.startsWith('--output-json='))?.split('=')[1]
   const ciMode          = process.env.MENTOR_CI_MODE === 'true'
   const ciIssueId       = process.env.MENTOR_ISSUE_ID
@@ -92,6 +93,28 @@ async function main(): Promise<void> {
     console.log(chalk.gray('  Reviewing branch diff vs main'))
     diff = getDiffFromGit('main...HEAD')
     stagedFiles = extractFilesFromDiff(diff)
+
+  } else if (diffBranch) {
+    // Everything on this branch INCLUDING what is staged right now.
+    //
+    // --diff-main compares main...HEAD, which at pre-commit time excludes the
+    // very change being committed — the work would only be reviewed on the
+    // next commit. Diffing the merge base against the index instead covers the
+    // whole ticket and the commit in progress together.
+    const base = getBranchBase()
+
+    if (base) {
+      console.log(chalk.gray('  Reviewing whole branch, including staged changes'))
+      diff = getDiffFromGit(`--cached ${base}`)
+      stagedFiles = extractFilesFromDiff(diff)
+    } else {
+      // No main to compare against (a fresh clone, a detached HEAD). Reviewing
+      // the staged change is worse than the whole branch but better than
+      // blocking the commit outright.
+      console.log(chalk.yellow('  ⚠ Could not find main — reviewing staged files only.'))
+      stagedFiles = getStagedFiles()
+      diff = getStagedDiff()
+    }
 
   } else {
     // Default — staged files (pre-commit mode)
@@ -164,6 +187,23 @@ async function main(): Promise<void> {
   }
 }
 
+// The commit this branch forked from, so a review covers the ticket's work
+// and nothing that merely landed on main since.
+function getBranchBase(): string | null {
+  for (const ref of ['main', 'origin/main']) {
+    try {
+      const base = execSync(`git merge-base ${ref} HEAD`, {
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim()
+      if (base) return base
+    } catch {
+      // Try the next ref.
+    }
+  }
+  return null
+}
+
 function getDiffFromGit(range: string): string {
   try {
     const diff = execSync(
@@ -214,6 +254,7 @@ Usage:
   npm run review                           Review staged files (pre-commit)
   npm run review:last                      Review last commit
   npm run review:branch                    Review all changes vs main
+  npm run review -- --diff-branch          Review whole branch + staged changes
   npm run review -- --issue=WRE-135        Review specific Linear issue
   npm run review -- --no-block             Review without blocking commit
   npm run review -- --verbose              Show full error traces
