@@ -11,18 +11,22 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/coreos/go-oidc"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/oauth2"
 
 	"github.com/resend/resend-go/v3"
 
 	"github.com/willikay11/wrench/api/internal/cache"
 	"github.com/willikay11/wrench/api/internal/config"
+	authsvc "github.com/willikay11/wrench/api/internal/core/services/auth"
 	emaildispatchsvc "github.com/willikay11/wrench/api/internal/core/services/emaildispatch"
 	waitlistsvc "github.com/willikay11/wrench/api/internal/core/services/waitlist"
+
 	"github.com/willikay11/wrench/api/internal/mailer"
 	"github.com/willikay11/wrench/api/internal/postgres"
 	"github.com/willikay11/wrench/api/internal/rest"
@@ -65,9 +69,26 @@ func main() {
 	// permanent-vs-transient classification, and so sends actually time out.
 	resendClient := resend.NewCustomClient(mailer.NewHTTPClient(15*time.Second), cfg.ResendAPIKey)
 
+	// provider
+	provider, err := oidc.NewProvider(
+		context.Background(),
+		authsvc.GoogleIssuer,
+	)
+	//oauth2 config
+	oauth2Config := oauth2.Config{
+		ClientID:     cfg.GoogleClientId,
+		ClientSecret: cfg.GoogleClientSecret,
+		Endpoint:     provider.Endpoint(),
+		RedirectURL:  "http://localhost:3000/api/auth/google/callback",
+	}
+	// verifier
+	verifier := provider.Verifier(authsvc.GoogleOIDCConfig(cfg.GoogleClientId))
+
 	// Driven adapters
 	waitlistRepo := postgres.NewWaitlistRepository(pool)
 	waitlistRedis := cache.NewWaitlistRedis(redisClient)
+
+	authRepo := postgres.NewAuthRepository(pool)
 
 	emailOutbox := postgres.NewOutbox(pool)
 	emailSender := mailer.NewResend(resendClient, cfg.FromEmail)
@@ -76,9 +97,11 @@ func main() {
 	// Core services
 	waitlistSvc := waitlistsvc.NewService(waitlistRepo, waitlistRedis, emailOutbox, transactionManager)
 	emailDispatchSvc := emaildispatchsvc.NewService(emailOutbox, emailSender, cfg.EmailBatchSize, cfg.EmailStaleAfter)
+	authSvc := authsvc.NewService(&oauth2Config, verifier, authRepo, transactionManager, cfg.JWTSecret)
 
 	// Driving adapters
 	waitlistHandler := rest.NewWaitlistHandler(waitlistSvc)
+	authHandler := rest.NewAuthHandler(authSvc)
 	emailWorker := worker.NewDispatcher(emailDispatchSvc, cfg.EmailPollInterval, cfg.EmailTickTimeout)
 
 	// Router
@@ -88,7 +111,7 @@ func main() {
 	r.Use(middleware.RequestID)
 	// Before Recoverer so a panic is logged as the 500 it turns into, and
 	// after RequestID so the id is available to log.
-	r.Use(rest.RequestLogger)
+	// r.Use(rest.RequestLogger)
 	// middleware.RealIP is deliberately not used: it rewrites r.RemoteAddr
 	// from client-controlled headers (X-Forwarded-For, True-Client-IP,
 	// X-Real-IP) whether or not our infrastructure sets them, so any per-IP
@@ -107,6 +130,8 @@ func main() {
 	// API routes
 	r.Post("/v1/waitlist", waitlistHandler.JoinWaitlist)
 	r.Get("/v1/waitlist/count", waitlistHandler.CountWaitlist)
+	r.Post("/v1/auth/login/google", authHandler.LoginWithGoogle)
+	r.Post("/v1/auth/refresh", authHandler.RefreshToken)
 
 	// Server with timeouts
 	srv := &http.Server{

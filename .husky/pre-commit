@@ -26,6 +26,9 @@ if [ ! -f "$REPO_ROOT/.mentor.env" ]; then
 fi
 
 # Run the mentor review
-cd "$MENTOR_DIR" && npx tsx src/index.ts review
+# --diff-branch reviews the whole branch plus what is staged, not just the
+# staged files. The ticket's acceptance criteria span several commits, so a
+# staged-only review reports work already committed as missing.
+cd "$MENTOR_DIR" && npx tsx src/index.ts review --diff-branch
 
 exit $?

@@ -19,14 +19,19 @@ function makeMql(query: string, matches = false) {
   }
 }
 
-Object.defineProperty(window, "matchMedia", {
-  writable: true,
-  configurable: true,
-  value: vi.fn((query: string) => makeMql(query)),
-})
+// Server-side tests — route handlers, anything importing node:crypto — opt
+// into the node environment with a `@vitest-environment node` pragma. There is
+// no window there to patch, and none of these shims apply.
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: vi.fn((query: string) => makeMql(query)),
+  })
 
-window.ResizeObserver = class {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-} as unknown as typeof ResizeObserver
+  window.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver
+}
