@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
     AUTH_STATUS_PARAM,
     authPagePath,
+    GARAGE_PATH,
     isGoogleSignInIntent,
     type AuthStatus,
     type GoogleSignInIntent,
@@ -214,6 +215,17 @@ const redirectToAuthPage = (request: NextRequest, intent: GoogleSignInIntent, st
     return NextResponse.redirect(url);
 };
 
+/**
+ * Where a completed sign-in goes. The status rides along so the garage can
+ * greet the user; it is the only thing that travels in the URL.
+ */
+const redirectToGarage = (request: NextRequest, status: AuthStatus) => {
+    const url = new URL(GARAGE_PATH, request.nextUrl.origin);
+    url.searchParams.set(AUTH_STATUS_PARAM, status);
+
+    return NextResponse.redirect(url);
+};
+
 export {
     buildAuthorizeUrl,
     createPkcePair,
@@ -223,6 +235,7 @@ export {
     exchangeCodeForIdToken,
     readOAuthConfig,
     redirectToAuthPage,
+    redirectToGarage,
     resolveRedirectUri,
     stateMatches,
     GOOGLE_AUTHORIZE_URL,

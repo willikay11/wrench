@@ -13,6 +13,7 @@ import {
 import {
     decodeHandshake,
     redirectToAuthPage,
+    redirectToGarage,
     stateMatches,
     OAUTH_COOKIE_PATH,
     OAUTH_HANDSHAKE_COOKIE,
@@ -33,7 +34,11 @@ const GET = async (request: NextRequest) => {
     const params = request.nextUrl.searchParams;
 
     const finish = (status: AuthStatus, session?: AuthResponse) => {
-        const response = redirectToAuthPage(request, intent, status);
+        // A signed-in user goes to the garage; anyone else returns to the
+        // screen they started on, where the button still is.
+        const response = session
+            ? redirectToGarage(request, status)
+            : redirectToAuthPage(request, intent, status);
         // Single-use whatever the outcome: leaving it set would let a replayed
         // callback URL reuse the verifier.
         response.cookies.delete({ name: OAUTH_HANDSHAKE_COOKIE, path: OAUTH_COOKIE_PATH });

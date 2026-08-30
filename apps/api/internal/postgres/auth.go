@@ -36,8 +36,9 @@ func (r *authRepo) FindUserIdentity(ctx context.Context, providerUserId string, 
 	defer cancel()
 
 	var userIdentity domain.UserIdentity
-
-	err := from(ctx, r.db).QueryRow(ctx, userIdentityQuery, providerUserId, provider).Scan(&userIdentity.Id, &userIdentity.UserId, &userIdentity.Provider, &userIdentity.ProviderEmail)
+	var userId string
+	var id string
+	err := from(ctx, r.db).QueryRow(ctx, userIdentityQuery, providerUserId, provider).Scan(&id, &userId, &userIdentity.Provider, &userIdentity.ProviderEmail)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -45,6 +46,16 @@ func (r *authRepo) FindUserIdentity(ctx context.Context, providerUserId string, 
 		}
 
 		return domain.UserIdentity{}, fmt.Errorf("find user identity: %w", err)
+	}
+
+	userIdentity.Id, err = uuid.Parse(id)
+	if err != nil {
+		return domain.UserIdentity{}, fmt.Errorf("parse id: %w", err)
+	}
+
+	userIdentity.UserId, err = uuid.Parse(userId)
+	if err != nil {
+		return domain.UserIdentity{}, fmt.Errorf("parse user id: %w", err)
 	}
 
 	return userIdentity, nil
@@ -56,7 +67,8 @@ const userQuery = `
 		displayName,
 		email,
 		avatarUrl,
-		emailVerified
+		emailVerified,
+		status
 	FROM users 
 	WHERE email = $1`
 
@@ -67,7 +79,43 @@ func (r *authRepo) FindUser(ctx context.Context, email string) (domain.User, err
 	var user domain.User
 	var userId string
 
-	err := from(ctx, r.db).QueryRow(ctx, userQuery, email).Scan(&userId, &user.DisplayName, &user.Email, &user.AvatarUrl, &user.EmailVerified)
+	err := from(ctx, r.db).QueryRow(ctx, userQuery, email).Scan(&userId, &user.DisplayName, &user.Email, &user.AvatarUrl, &user.EmailVerified, &user.Status)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.User{}, domain.ErrUserNotFound
+		}
+
+		return domain.User{}, fmt.Errorf("find user: %w", err)
+	}
+
+	user.Id, err = uuid.Parse(userId)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("parse user id: %w", err)
+	}
+
+	return user, nil
+}
+
+const userByIdQuery = `
+	SELECT
+		id,
+		displayName,
+		email,
+		avatarUrl,
+		emailVerified,
+		status
+	FROM users 
+	WHERE id = $1`
+
+func (r *authRepo) FindUserById(ctx context.Context, id uuid.UUID) (domain.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var user domain.User
+	var userId string
+
+	err := from(ctx, r.db).QueryRow(ctx, userByIdQuery, id).Scan(&userId, &user.DisplayName, &user.Email, &user.AvatarUrl, &user.EmailVerified, &user.Status)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -175,5 +223,85 @@ func (r *authRepo) CreateRefreshToken(ctx context.Context, userId uuid.UUID, tok
 		return fmt.Errorf("create refresh token entry: %w", err)
 	}
 
+	return nil
+}
+
+const refreshTokenQuery = `
+	SELECT
+		id,
+		userId,
+		tokenHash,
+		family,
+		expiresAt,
+		revokedAt
+	FROM refreshtokens 
+	WHERE tokenHash = $1`
+
+func (r *authRepo) FindRefreshTokenByHash(ctx context.Context, tokenHash string) (domain.RefreshToken, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var refreshToken domain.RefreshToken
+	var userId string
+	var id string
+	var family string
+
+	err := from(ctx, r.db).QueryRow(ctx, refreshTokenQuery, tokenHash).Scan(&id, &userId, &family, &refreshToken.ExpiresAt, &refreshToken.RevokedAt)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.RefreshToken{}, domain.ErrRefreshTokenNotFound
+		}
+		return domain.RefreshToken{}, fmt.Errorf("query refresh token: %w", err)
+	}
+
+	refreshToken.Id, err = uuid.Parse(id)
+	if err != nil {
+		return domain.RefreshToken{}, fmt.Errorf("parse id: %w", err)
+	}
+
+	refreshToken.UserId, err = uuid.Parse(userId)
+	if err != nil {
+		return domain.RefreshToken{}, fmt.Errorf("parse user id: %w", err)
+	}
+
+	refreshToken.Family, err = uuid.Parse(family)
+	if err != nil {
+		return domain.RefreshToken{}, fmt.Errorf("parse family: %w", err)
+	}
+	return refreshToken, nil
+}
+
+const revokeTokenQuery = `
+	UPDATE refreshtokens 
+		SET revokedAt = NOW()
+	WHERE tokenhash = $1
+`
+
+func (r *authRepo) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	_, err := from(ctx, r.db).Exec(ctx, revokeTokenQuery, tokenHash)
+	if err != nil {
+		return fmt.Errorf("update revoked at: %w", err)
+	}
+	return nil
+}
+
+const revokeTokenFamilyQuery = `
+	UPDATE refreshtokens 
+		SET revokedAt = NOW()
+	WHERE family = $1
+`
+
+func (r *authRepo) RevokeFamily(ctx context.Context, family uuid.UUID) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	_, err := from(ctx, r.db).Exec(ctx, revokeTokenFamilyQuery, family)
+	if err != nil {
+		return fmt.Errorf("update revoked at: %w", err)
+	}
 	return nil
 }

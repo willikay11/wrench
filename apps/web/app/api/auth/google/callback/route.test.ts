@@ -81,9 +81,13 @@ describe('GET /api/auth/google/callback', () => {
             expect(locationOf(await signIn(200)).searchParams.get('auth')).toBe('signed-in')
         })
 
-        it('sends the user back to whichever screen they started on', async () => {
-            const response = await signIn(200, { ...HANDSHAKE, intent: 'login' })
-            expect(locationOf(response).pathname).toBe('/login')
+        // Signing up and logging in both end in the same place: the garage.
+        // The intent only decides where a *failed* attempt returns to.
+        it('lands on the garage whichever screen it started from', async () => {
+            expect(locationOf(await signIn(201)).pathname).toBe('/garage')
+
+            const fromLogin = await signIn(200, { ...HANDSHAKE, intent: 'login' })
+            expect(locationOf(fromLogin).pathname).toBe('/garage')
         })
 
         it('keeps the refresh token in an httpOnly cookie the browser cannot read', async () => {
@@ -166,6 +170,19 @@ describe('GET /api/auth/google/callback', () => {
 
             expect(fetchMock).not.toHaveBeenCalled()
             expect(locationOf(response).pathname).toBe('/signup')
+            assertNoSession(response)
+        })
+
+        // A failure must not drop the user on a screen with no way forward.
+        it('returns a failed login to /login, not the garage', async () => {
+            apiReturns(500, { error: 'Something went wrong' })
+
+            const response = await callback(
+                { code: 'the-code', state: HANDSHAKE.state },
+                { ...HANDSHAKE, intent: 'login' },
+            )
+
+            expect(locationOf(response).pathname).toBe('/login')
             assertNoSession(response)
         })
 

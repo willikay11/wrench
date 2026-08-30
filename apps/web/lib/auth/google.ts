@@ -26,8 +26,11 @@ const isGoogleSignInIntent = (value: unknown): value is GoogleSignInIntent =>
 const isAuthStatus = (value: unknown): value is AuthStatus =>
     value === "welcome" || value === "signed-in" || value === "cancelled" || value === "error";
 
-/** Where each intent started, and so where the callback sends the user back. */
+/** Where each intent started, and so where a failed round trip returns to. */
 const authPagePath = (intent: GoogleSignInIntent) => (intent === "login" ? "/login" : "/signup");
+
+/** Where a completed sign-in lands, whichever screen it started from. */
+const GARAGE_PATH = "/garage";
 
 /**
  * Hands the browser to our authorize route.
@@ -39,5 +42,12 @@ const startGoogleSignIn = (intent: GoogleSignInIntent): void => {
     window.location.assign(`/api/auth/google/start?intent=${intent}`);
 };
 
-export { startGoogleSignIn, isGoogleSignInIntent, isAuthStatus, authPagePath, AUTH_STATUS_PARAM };
+export {
+    startGoogleSignIn,
+    isGoogleSignInIntent,
+    isAuthStatus,
+    authPagePath,
+    AUTH_STATUS_PARAM,
+    GARAGE_PATH,
+};
 export type { GoogleSignInIntent, AuthStatus };

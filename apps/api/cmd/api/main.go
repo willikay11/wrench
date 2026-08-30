@@ -97,7 +97,7 @@ func main() {
 	// Core services
 	waitlistSvc := waitlistsvc.NewService(waitlistRepo, waitlistRedis, emailOutbox, transactionManager)
 	emailDispatchSvc := emaildispatchsvc.NewService(emailOutbox, emailSender, cfg.EmailBatchSize, cfg.EmailStaleAfter)
-	authSvc := authsvc.NewService(oauth2Config, verifier, authRepo, transactionManager, cfg.JWTSecret)
+	authSvc := authsvc.NewService(&oauth2Config, verifier, authRepo, transactionManager, cfg.JWTSecret)
 
 	// Driving adapters
 	waitlistHandler := rest.NewWaitlistHandler(waitlistSvc)
@@ -131,6 +131,7 @@ func main() {
 	r.Post("/v1/waitlist", waitlistHandler.JoinWaitlist)
 	r.Get("/v1/waitlist/count", waitlistHandler.CountWaitlist)
 	r.Post("/v1/auth/login/google", authHandler.LoginWithGoogle)
+	r.Post("/v1/auth/refresh", authHandler.RefreshToken)
 
 	// Server with timeouts
 	srv := &http.Server{
