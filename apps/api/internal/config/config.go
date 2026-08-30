@@ -44,6 +44,7 @@ type Config struct {
 	// GOOGLE OAUTH2
 	GoogleClientId     string
 	GoogleClientSecret string
+	FrontendUrl        string
 }
 
 func Load() (*Config, error) {
@@ -68,6 +69,7 @@ func Load() (*Config, error) {
 		"FROM_EMAIL":           &cfg.FromEmail,
 		"GOOGLE_CLIENT_ID":     &cfg.GoogleClientId,
 		"GOOGLE_CLIENT_SECRET": &cfg.GoogleClientSecret,
+		"FRONTEND_URL":         &cfg.FrontendUrl,
 	}
 
 	var missing []string

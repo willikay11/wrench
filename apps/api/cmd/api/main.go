@@ -79,7 +79,7 @@ func main() {
 		ClientID:     cfg.GoogleClientId,
 		ClientSecret: cfg.GoogleClientSecret,
 		Endpoint:     provider.Endpoint(),
-		RedirectURL:  "http://localhost:3000/api/auth/google/callback",
+		RedirectURL:  fmt.Sprintf("%s/api/auth/google/callback", cfg.FrontendUrl),
 	}
 	// verifier
 	verifier := provider.Verifier(authsvc.GoogleOIDCConfig(cfg.GoogleClientId))
