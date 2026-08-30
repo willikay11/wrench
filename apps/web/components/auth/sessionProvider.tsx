@@ -8,9 +8,10 @@ import { isWrenchSession, SESSION_ENDPOINT, type WrenchSession } from "@/lib/aut
  * Holds the signed-in session in memory, and nowhere else.
  *
  * ADR-005: the access token is never written to localStorage or a readable
- * cookie, so it lives in React state and dies with the tab. Reloading the page
- * loses it — restoring it needs POST /v1/auth/refresh, which does not exist
- * yet. Until it does, a reload after sign-in shows a signed-out page.
+ * cookie, so it lives in React state and dies with the tab. A reload rebuilds
+ * it from the refresh token cookie — /api/auth/session falls back to
+ * POST /v1/auth/refresh when the sign-in handoff is gone — so the session
+ * survives, while the token itself never touches storage the browser exposes.
  */
 
 type SessionState = {
