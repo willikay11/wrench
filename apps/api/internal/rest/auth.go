@@ -79,5 +79,30 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, loggedInUser)
+}
 
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		RefreshToken string `json:"refreshToken"`
+	}
+
+	body := http.MaxBytesReader(w, r.Body, 1048576) // Limit request body to 1MB
+
+	decodeErr := json.NewDecoder(body).Decode(&request)
+
+	if decodeErr != nil {
+		payload := map[string]string{"error": "Invalid request payload"}
+		writeJSON(w, http.StatusBadRequest, payload)
+		return
+	}
+
+	err := h.authService.Logout(r.Context(), request.RefreshToken)
+
+	if err != nil {
+		payload := map[string]string{"message": "Unauthorized"}
+		writeJSON(w, http.StatusUnauthorized, payload)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, nil)
 }

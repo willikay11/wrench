@@ -132,6 +132,7 @@ func main() {
 	r.Get("/v1/waitlist/count", waitlistHandler.CountWaitlist)
 	r.Post("/v1/auth/login/google", authHandler.LoginWithGoogle)
 	r.Post("/v1/auth/refresh", authHandler.RefreshToken)
+	r.Post("/v1/auth/logout", authHandler.Logout)
 
 	// Server with timeouts
 	srv := &http.Server{

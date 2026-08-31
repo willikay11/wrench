@@ -14,6 +14,7 @@ import (
 type AuthService interface {
 	LoginWithGoogle(ctx context.Context, idToken string, verifier string) (domain.LoggedInUser, string, error)
 	RefreshToken(ctx context.Context, refreshToken string) (domain.LoggedInUser, error)
+	Logout(ctx context.Context, refreshToken string) error
 }
 
 // Driven — the authorization code exchange with Google.

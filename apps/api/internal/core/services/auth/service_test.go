@@ -148,12 +148,6 @@ func (m *mockAuthRepository) RevokeRefreshToken(ctx context.Context, tokenHash s
 }
 
 func TestRefreshToken(t *testing.T) {
-	type testCase struct {
-		name                 string
-		token                string
-		expectedLoggedInUser domain.LoggedInUser
-		wantErr              error
-	}
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
@@ -245,5 +239,61 @@ func TestRefreshToken(t *testing.T) {
 		service := auth.NewService(mockOauth2Config, verifier, mockAuthRepo, mockTxManager, "RandDomSecret")
 		_, err := service.RefreshToken(context.Background(), "k6YQl3nT18GUH3dXl_yvKcetwObqegKplMQqKeqoycA")
 		assert.ErrorIs(t, err, domain.ErrRefreshTokenRevoked)
+	})
+}
+
+func TestLogout(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	verifier := oidc.NewVerifier(
+		authsvc.GoogleIssuer,
+		testKeySet{&key.PublicKey},
+		authsvc.GoogleOIDCConfig(ourClientID),
+	)
+
+	var id = uuid.New()
+	var family = uuid.New()
+
+	mockTxManager := &mockTxManager{}
+
+	mockOauth2Config := &mockOauth2Config{}
+
+	mockAuthRepo := &mockAuthRepository{
+		savedUser: domain.User{
+			Id:          id,
+			Email:       "willikay11@gmail.com",
+			DisplayName: "William Kamau",
+			AvatarUrl:   "https://lh3.googleusercontent.com/a/ACg8ocK1k6C7GcsvTZCp2neyUKNTCMzb04bW2A13vhzaS-X1myu8iw=s96-c",
+			Status:      "active",
+		},
+
+		savedUserIdentity: domain.UserIdentity{
+			Id:            uuid.New(),
+			UserId:        id,
+			Provider:      "google",
+			ProviderEmail: "willikay11@gmail.com",
+		},
+
+		savedRefreshToken: domain.RefreshToken{
+			Id:        uuid.New(),
+			UserId:    id,
+			TokenHash: "b6c4f40fa59f8864d12cb24ddce52e29601de1c689f4f6c6c747c4d3fba49711",
+			Family:    family,
+			ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+		},
+	}
+
+	t.Run("should test logout with a valid refresh token", func(t *testing.T) {
+		service := auth.NewService(mockOauth2Config, verifier, mockAuthRepo, mockTxManager, "RandDomSecret")
+		err := service.Logout(context.Background(), "k6YQl3nT18GUH3dXl_yvKcetwObqegKplMQqKeqoycA")
+		assert.NoError(t, err)
+	})
+
+	t.Run("should test logout with an invalid refresh token", func(t *testing.T) {
+		mockAuthRepo.err = domain.ErrRefreshTokenNotFound
+		service := auth.NewService(mockOauth2Config, verifier, mockAuthRepo, mockTxManager, "RandDomSecret")
+		err := service.Logout(context.Background(), "k6YQl3nT18GUbbbb")
+		assert.ErrorIs(t, err, domain.ErrRefreshTokenNotFound)
 	})
 }

@@ -259,6 +259,34 @@ func (s *service) RefreshToken(ctx context.Context, refreshToken string) (domain
 	return loggedInUser, nil
 }
 
+func (s *service) Logout(ctx context.Context, refreshToken string) error {
+	err := s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
+		// first hash the token
+		hashedToken := hashOpaqueToken(refreshToken)
+
+		// query for the refreshToken via the hashed token
+		refreshToken, err := s.authRepo.FindRefreshTokenByHash(ctx, hashedToken)
+
+		if err != nil {
+			return err
+		}
+
+		err = s.authRepo.RevokeFamily(ctx, refreshToken.Family)
+
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *service) generateJWTToken(userId uuid.UUID, displayName string) (string, error) {
 	userIdStr := userId.String()
 	claims := domain.JWTClaims{
