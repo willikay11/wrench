@@ -23,9 +23,11 @@ import (
 
 	"github.com/willikay11/wrench/api/internal/cache"
 	"github.com/willikay11/wrench/api/internal/config"
+	"github.com/willikay11/wrench/api/internal/core/domain"
 	authsvc "github.com/willikay11/wrench/api/internal/core/services/auth"
 	emaildispatchsvc "github.com/willikay11/wrench/api/internal/core/services/emaildispatch"
 	waitlistsvc "github.com/willikay11/wrench/api/internal/core/services/waitlist"
+	CustomMiddleware "github.com/willikay11/wrench/api/internal/middleware"
 
 	"github.com/willikay11/wrench/api/internal/mailer"
 	"github.com/willikay11/wrench/api/internal/postgres"
@@ -132,6 +134,15 @@ func main() {
 	r.Get("/v1/waitlist/count", waitlistHandler.CountWaitlist)
 	r.Post("/v1/auth/login/google", authHandler.LoginWithGoogle)
 	r.Post("/v1/auth/refresh", authHandler.RefreshToken)
+	r.Route("/v1", func(r chi.Router) {
+		r.Use(CustomMiddleware.AuthenticateJWT(cfg.JWTSecret))
+
+		r.Post("/cars", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Println("userId", domain.MustUserID(r.Context()))
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+		})
+	})
 
 	// Server with timeouts
 	srv := &http.Server{
