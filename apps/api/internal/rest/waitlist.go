@@ -30,8 +30,11 @@ func (h *WaitlistHandler) JoinWaitlist(w http.ResponseWriter, r *http.Request) {
 	decodeErr := json.NewDecoder(body).Decode(&request)
 
 	if decodeErr != nil {
-		payload := map[string]string{"error": "Invalid request payload"}
-		writeJSON(w, http.StatusBadRequest, payload)
+		writeProblem(w, r, Problem{
+			Type:   typeMalformedBody,
+			Title:  "The request body could not be read",
+			Status: http.StatusBadRequest,
+		})
 		return
 	}
 
@@ -39,13 +42,17 @@ func (h *WaitlistHandler) JoinWaitlist(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidEmail) {
-			payload := map[string]string{"error": "Invalid email"}
-			writeJSON(w, http.StatusBadRequest, payload)
+			writeProblem(w, r, Problem{
+				Type:  typeValidationFailed,
+				Title: "The waitlist details did not validate",
+				// 400, not 422: the web client already branches on it.
+				Status:        http.StatusBadRequest,
+				InvalidParams: []InvalidParam{{Name: "email", Reason: "This is not a valid email address"}},
+			})
 			return
 		}
 		log.Error().Err(err).Msg("Failed to join waitlist")
-		payload := map[string]string{"error": "Something went wrong"}
-		writeJSON(w, http.StatusInternalServerError, payload)
+		serverProblem(w, r)
 		return
 	}
 
@@ -57,8 +64,7 @@ func (h *WaitlistHandler) CountWaitlist(w http.ResponseWriter, r *http.Request) 
 
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to count waitlist")
-		payload := map[string]string{"error": "Something went wrong"}
-		writeJSON(w, http.StatusInternalServerError, payload)
+		serverProblem(w, r)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"count": count})

@@ -2,9 +2,9 @@ package rest
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
+	"github.com/rs/zerolog/log"
 	"github.com/willikay11/wrench/api/internal/core/domain"
 	"github.com/willikay11/wrench/api/internal/core/ports"
 )
@@ -30,17 +30,19 @@ func (h *AuthHandler) LoginWithGoogle(w http.ResponseWriter, r *http.Request) {
 	decodeErr := json.NewDecoder(body).Decode(&request)
 
 	if decodeErr != nil {
-		payload := map[string]string{"error": "Invalid request payload"}
-		writeJSON(w, http.StatusBadRequest, payload)
+		writeProblem(w, r, Problem{
+			Type:   typeMalformedBody,
+			Title:  "The request body could not be read",
+			Status: http.StatusBadRequest,
+		})
 		return
 	}
 
 	loggedInUser, userMessage, err := h.authService.LoginWithGoogle(r.Context(), request.Code, request.Verifier)
 
 	if err != nil {
-		fmt.Println(err.Error())
-		payload := map[string]string{"error": "Something went wrong"}
-		writeJSON(w, http.StatusInternalServerError, payload)
+		log.Error().Err(err).Msg("Failed to log in with Google")
+		serverProblem(w, r)
 		return
 	}
 
@@ -65,16 +67,21 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	decodeErr := json.NewDecoder(body).Decode(&request)
 
 	if decodeErr != nil {
-		payload := map[string]string{"error": "Invalid request payload"}
-		writeJSON(w, http.StatusBadRequest, payload)
+		writeProblem(w, r, Problem{
+			Type:   typeMalformedBody,
+			Title:  "The request body could not be read",
+			Status: http.StatusBadRequest,
+		})
 		return
 	}
 
 	loggedInUser, err := h.authService.RefreshToken(r.Context(), request.RefreshToken)
 
 	if err != nil {
-		payload := map[string]string{"message": "Unauthorized"}
-		writeJSON(w, http.StatusUnauthorized, payload)
+		writeProblem(w, r, Problem{
+			Status: http.StatusUnauthorized,
+			Detail: "The refresh token is missing, expired, or already used.",
+		})
 		return
 	}
 

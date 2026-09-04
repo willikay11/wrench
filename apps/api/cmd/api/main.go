@@ -23,8 +23,8 @@ import (
 
 	"github.com/willikay11/wrench/api/internal/cache"
 	"github.com/willikay11/wrench/api/internal/config"
-	"github.com/willikay11/wrench/api/internal/core/domain"
 	authsvc "github.com/willikay11/wrench/api/internal/core/services/auth"
+	carsvc "github.com/willikay11/wrench/api/internal/core/services/car"
 	emaildispatchsvc "github.com/willikay11/wrench/api/internal/core/services/emaildispatch"
 	waitlistsvc "github.com/willikay11/wrench/api/internal/core/services/waitlist"
 	CustomMiddleware "github.com/willikay11/wrench/api/internal/middleware"
@@ -91,6 +91,7 @@ func main() {
 	waitlistRedis := cache.NewWaitlistRedis(redisClient)
 
 	authRepo := postgres.NewAuthRepository(pool)
+	carRepo := postgres.NewCarRepository(pool)
 
 	emailOutbox := postgres.NewOutbox(pool)
 	emailSender := mailer.NewResend(resendClient, cfg.FromEmail)
@@ -100,10 +101,11 @@ func main() {
 	waitlistSvc := waitlistsvc.NewService(waitlistRepo, waitlistRedis, emailOutbox, transactionManager)
 	emailDispatchSvc := emaildispatchsvc.NewService(emailOutbox, emailSender, cfg.EmailBatchSize, cfg.EmailStaleAfter)
 	authSvc := authsvc.NewService(&oauth2Config, verifier, authRepo, transactionManager, cfg.JWTSecret)
-
+	carSvc := carsvc.NewService(carRepo, transactionManager)
 	// Driving adapters
 	waitlistHandler := rest.NewWaitlistHandler(waitlistSvc)
 	authHandler := rest.NewAuthHandler(authSvc)
+	carHandler := rest.NewCarHandler(carSvc)
 	emailWorker := worker.NewDispatcher(emailDispatchSvc, cfg.EmailPollInterval, cfg.EmailTickTimeout)
 
 	// Router
@@ -137,11 +139,7 @@ func main() {
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(CustomMiddleware.AuthenticateJWT(cfg.JWTSecret))
 
-		r.Post("/cars", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Println("userId", domain.MustUserID(r.Context()))
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-		})
+		r.Post("/cars", carHandler.CreateCar)
 	})
 
 	// Server with timeouts
