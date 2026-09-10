@@ -1,33 +1,47 @@
-'use client';
+'use client'
 
-import { HugeiconsIcon } from "@hugeicons/react";
-import { PlusSignIcon } from "@hugeicons/core-free-icons";
+import { useState } from 'react'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { PlusSignIcon } from '@hugeicons/core-free-icons'
 
-import { Button } from "@/components/ui/button";
-import { toastInfo } from "@/lib/toast";
+import { AddCarSheet } from '@/components/app/addCarSheet'
+import { Button } from '@/components/ui/button'
 
 /**
  * Both entry points to adding a car — the header action and the empty state's
- * call to action — are the same button with different labels.
- *
- * There is no add-car flow or API yet, so it says so rather than opening a
- * form that cannot save. When POST /v1/cars lands this is the only component
- * that changes.
+ * call to action — are the same button with different labels, and each owns its
+ * own sheet so the two cannot fight over one open state.
  */
-const AddCarButton = ({ label, compact = false }: { label: string; compact?: boolean }) => (
-    <Button
-        type="button"
-        size={compact ? "sm" : "md"}
-        onClick={() =>
-            toastInfo({
-                title: "Adding cars is not open yet",
-                description: "Rex is still learning the garage. This lands with early access.",
-            })
-        }
-        leftIcon={compact ? <HugeiconsIcon icon={PlusSignIcon} /> : undefined}
-    >
-        {label}
-    </Button>
-);
+const AddCarButton = ({ label, compact = false }: { label: string; compact?: boolean }) => {
+  const [isOpen, setIsOpen] = useState(false)
+  // Bumped once the sheet has finished closing, so the next open finds empty
+  // fields. Deliberately not bumped on open: a Root that mounts already open
+  // has no state change to animate, which costs the slide-in.
+  const [attempt, setAttempt] = useState(0)
 
-export { AddCarButton };
+  return (
+    <>
+      <Button
+        type="button"
+        size={compact ? 'sm' : 'md'}
+        onClick={() => setIsOpen(true)}
+        leftIcon={compact ? <HugeiconsIcon icon={PlusSignIcon} /> : undefined}
+      >
+        {label}
+      </Button>
+
+      {/* Always mounted, so the Dialog owns the open state for the whole of
+          both transitions. Unmounting on close would cut the slide-out off at
+          the first frame — React would remove the element before the animation
+          Base UI is waiting on could run. */}
+      <AddCarSheet
+        key={attempt}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        onClosed={() => setAttempt((count) => count + 1)}
+      />
+    </>
+  )
+}
+
+export { AddCarButton }
