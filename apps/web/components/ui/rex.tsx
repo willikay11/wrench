@@ -10,7 +10,10 @@ const Rex = ({ size = 200, showPopUp = true }: { size?: number, showPopUp?: bool
                 </div>
             )}
             <div className="size-(--rex-size) rounded-full bg-[#111111] border-[1.5px] border-primary flex items-center justify-center cursor-pointer relative shadow-[0_0_50px_rgba(232,105,60,0.35)] animate-ring-pulse">
-                <svg width="90" height="64" viewBox="0 0 28 20">
+                {/* Sized as a fraction of the disc rather than in pixels, so the
+                    face scales with `size`. 45% of 200px is the 90px the default
+                    always drew, and the viewBox keeps the 28:20 ratio. */}
+                <svg className="w-[45%]" viewBox="0 0 28 20">
                 <rect className="animate-eye-scan" x="4" y="7" width="7" height="5" rx="1.5" fill="#E8693C"></rect>
                 <rect className="animate-eye-scan" x="17" y="7" width="7" height="5" rx="1.5" fill="#E8693C"></rect>
                 <line x1="9" y1="17" x2="19" y2="17" stroke="#E8693C" strokeWidth="1.4" strokeLinecap="round"></line>

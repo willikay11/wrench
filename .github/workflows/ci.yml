@@ -27,6 +27,20 @@ jobs:
         working-directory: apps/web
         run: npm run test:run
       - run: npm run build
+        env:
+          # Sentinels, not credentials. The build only needs the vars to exist;
+          # the step below then greps the client bundle for this exact string.
+          GOOGLE_CLIENT_ID: ci-sentinel-client-id
+          GOOGLE_CLIENT_SECRET: ci-sentinel-client-secret
+      # A stray NEXT_PUBLIC_ prefix, or a client component importing the
+      # server-side OAuth module, would publish the secret to every visitor
+      # and break no other check.
+      - name: Assert the OAuth client secret never reaches the browser
+        run: |
+          if grep -rqF "ci-sentinel-client-secret" .next/static; then
+            echo "::error::GOOGLE_CLIENT_SECRET is present in the client bundle"
+            exit 1
+          fi
 
   api:
     name: API — lint, typecheck, test
