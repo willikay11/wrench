@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,10 @@ type mockCarRepo struct {
 	received          domain.Car
 	receiveUpdatedCar domain.UpdateCar
 
+	receivedQuery domain.CarQuery
+
 	result domain.Car
+	page   domain.CarPage
 	err    error
 }
 
@@ -46,6 +50,16 @@ func (m *mockCarRepo) Save(_ context.Context, car domain.Car) (domain.Car, error
 		return domain.Car{}, m.err
 	}
 	return m.result, nil
+}
+
+func (m *mockCarRepo) List(_ context.Context, query domain.CarQuery) (domain.CarPage, error) {
+	m.calls++
+	m.receivedQuery = query
+
+	if m.err != nil {
+		return domain.CarPage{}, m.err
+	}
+	return m.page, nil
 }
 
 func (m *mockCarRepo) Update(_ context.Context, car domain.UpdateCar) (domain.Car, error) {
@@ -188,3 +202,36 @@ func TestUpdateCarForwardsRepositoryErrorsUnchanged(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// ListCars is the same pass-through again: the validated query reaches the
+// repository intact, and the page comes back unchanged.
+func TestListCarsPassesTheQueryToTheRepository(t *testing.T) {
+	owner := uuid.New()
+	cursor := domain.CarCursor{CreatedAt: time.Now().UTC(), Id: uuid.New()}
+	limit := 5
+
+	query, err := domain.NewCarQuery(owner, &limit, &cursor)
+	require.NoError(t, err)
+
+	page := domain.CarPage{Cars: []domain.Car{aCar()}, HasMore: true, Total: 9, NextCursor: &cursor}
+	repo := &mockCarRepo{page: page}
+
+	got, err := newService(repo).ListCars(t.Context(), query)
+
+	require.NoError(t, err)
+	require.Equal(t, page, got)
+	require.Equal(t, 1, repo.calls)
+	require.Equal(t, query, repo.receivedQuery)
+	// The owner in particular: a service that rebuilt the query could drop it.
+	require.Equal(t, owner, repo.receivedQuery.UserId)
+}
+
+func TestListCarsForwardsRepositoryErrorsUnchanged(t *testing.T) {
+	failure := errors.New("dial tcp: connection refused")
+	repo := &mockCarRepo{err: failure}
+
+	got, err := newService(repo).ListCars(t.Context(), domain.CarQuery{UserId: uuid.New(), Limit: 20})
+
+	require.ErrorIs(t, err, failure)
+	require.Equal(t, domain.CarPage{}, got)
+}

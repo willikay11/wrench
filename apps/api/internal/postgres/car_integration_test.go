@@ -234,3 +234,196 @@ func TestUpdateMapsConstraintViolationsToDomainErrors(t *testing.T) {
 		})
 	}
 }
+
+// carsFor creates n cars for one owner. They are inserted in one statement so
+// several share a createdAt to the microsecond — which is the case a cursor on
+// createdAt alone gets wrong, and the reason the cursor carries the id too.
+func carsFor(t *testing.T, pool *pgxpool.Pool, owner uuid.UUID, n int) {
+	t.Helper()
+
+	// One statement, so NOW() is evaluated once and every row shares a
+	// createdAt to the microsecond. That is the case a cursor carrying only
+	// createdAt gets wrong, and it must be the case these tests exercise.
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO cars (userId, make, model, year, engine, usageType)
+		 SELECT $1, 'Make' || g, 'Model', 2018, 'Engine', 'weekend'
+		 FROM generate_series(1, $2) AS g`,
+		owner, n)
+	require.NoError(t, err)
+}
+
+// walk pages to the end and returns every id seen, plus the number of requests.
+func walk(t *testing.T, repo *carRepo, owner uuid.UUID, limit int) ([]uuid.UUID, int) {
+	t.Helper()
+
+	var seen []uuid.UUID
+	var cursor *domain.CarCursor
+	pages := 0
+
+	for {
+		query, err := domain.NewCarQuery(owner, &limit, cursor)
+		require.NoError(t, err)
+
+		page, err := repo.List(t.Context(), query)
+		require.NoError(t, err)
+		pages++
+
+		for _, car := range page.Cars {
+			seen = append(seen, car.Id)
+		}
+
+		if !page.HasMore {
+			require.Nil(t, page.NextCursor, "a last page must not offer a cursor")
+			break
+		}
+		require.NotNil(t, page.NextCursor, "a page with more must offer a cursor")
+		cursor = page.NextCursor
+
+		require.Less(t, pages, 50, "paging did not terminate")
+	}
+
+	return seen, pages
+}
+
+// The property that matters: a full walk yields every car exactly once. Cars
+// sharing a createdAt are the case that breaks a naive cursor.
+func TestListPagesThroughEveryCarExactlyOnce(t *testing.T) {
+	pool := withDB(t)
+	alice, _ := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+
+	carsFor(t, pool, alice, 7)
+
+	for _, limit := range []int{1, 2, 3, 6, 7, 8, 50} {
+		seen, pages := walk(t, repo, alice, limit)
+
+		require.Len(t, seen, 7, "limit %d returned %d cars over %d pages", limit, len(seen), pages)
+
+		unique := map[uuid.UUID]bool{}
+		for _, id := range seen {
+			require.False(t, unique[id], "limit %d returned a car twice", limit)
+			unique[id] = true
+		}
+		require.Len(t, unique, 7)
+	}
+}
+
+func TestListOrdersNewestFirstAndBreaksTiesStably(t *testing.T) {
+	pool := withDB(t)
+	alice, _ := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+
+	carsFor(t, pool, alice, 6)
+
+	query, err := domain.NewCarQuery(alice, nil, nil)
+	require.NoError(t, err)
+	page, err := repo.List(t.Context(), query)
+	require.NoError(t, err)
+	require.Len(t, page.Cars, 6)
+
+	for i := 1; i < len(page.Cars); i++ {
+		previous, current := page.Cars[i-1], page.Cars[i]
+		if previous.CreatedAt.Equal(current.CreatedAt) {
+			// The tiebreak, which is what makes the order total.
+			require.Greater(t, previous.Id.String(), current.Id.String(), "ties must fall back to id descending")
+			continue
+		}
+		require.True(t, previous.CreatedAt.After(current.CreatedAt), "cars must be newest first")
+	}
+}
+
+// The list IDOR test: the owner comes from the query, and no cursor can reach
+// past it — not one minted from another user's page, and not a forged one.
+func TestListNeverReturnsAnotherUsersCars(t *testing.T) {
+	pool := withDB(t)
+	alice, bob := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+
+	carsFor(t, pool, alice, 3)
+	carsFor(t, pool, bob, 4)
+
+	bobsPage, err := repo.List(t.Context(), mustQuery(t, bob, nil))
+	require.NoError(t, err)
+	require.Len(t, bobsPage.Cars, 4)
+
+	bobsIds := map[uuid.UUID]bool{}
+	for _, car := range bobsPage.Cars {
+		bobsIds[car.Id] = true
+	}
+
+	// A cursor built from one of Bob's rows, replayed by Alice.
+	forged := &domain.CarCursor{CreatedAt: bobsPage.Cars[0].CreatedAt.Add(time.Hour), Id: bobsPage.Cars[0].Id}
+
+	for _, cursor := range []*domain.CarCursor{nil, forged} {
+		page, err := repo.List(t.Context(), mustQuery(t, alice, cursor))
+		require.NoError(t, err)
+
+		for _, car := range page.Cars {
+			require.Equal(t, alice, car.UserId, "a car of another user was returned")
+			require.False(t, bobsIds[car.Id], "one of Bob's cars leaked into Alice's list")
+		}
+		// The count is Alice's own, never the table's.
+		require.Equal(t, 3, page.Total)
+	}
+}
+
+func TestListOfAnEmptyGarageIsAnEmptyPage(t *testing.T) {
+	pool := withDB(t)
+	alice, bob := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+
+	// Bob has cars; Alice does not. Alice's page must not borrow them.
+	carsFor(t, pool, bob, 3)
+
+	page, err := repo.List(t.Context(), mustQuery(t, alice, nil))
+
+	require.NoError(t, err)
+	require.Empty(t, page.Cars)
+	require.False(t, page.HasMore)
+	require.Nil(t, page.NextCursor)
+	require.Zero(t, page.Total)
+}
+
+// hasMore must describe the next page, not the current one — the off-by-one
+// that reports "more" on an exactly-full last page sends a client to fetch it.
+func TestListReportsHasMoreOnlyWhenAPageFollows(t *testing.T) {
+	pool := withDB(t)
+	alice, _ := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+
+	carsFor(t, pool, alice, 4)
+
+	cases := []struct {
+		limit       int
+		wantCars    int
+		wantHasMore bool
+	}{
+		{limit: 3, wantCars: 3, wantHasMore: true},
+		{limit: 4, wantCars: 4, wantHasMore: false}, // exactly full, nothing after
+		{limit: 5, wantCars: 4, wantHasMore: false},
+	}
+
+	for _, tc := range cases {
+		page, err := repo.List(t.Context(), mustQuery(t, alice, nil, tc.limit))
+		require.NoError(t, err)
+
+		require.Len(t, page.Cars, tc.wantCars, "limit %d", tc.limit)
+		require.Equal(t, tc.wantHasMore, page.HasMore, "limit %d", tc.limit)
+		require.Equal(t, tc.wantHasMore, page.NextCursor != nil, "limit %d", tc.limit)
+		require.Equal(t, 4, page.Total)
+	}
+}
+
+func mustQuery(t *testing.T, owner uuid.UUID, cursor *domain.CarCursor, limit ...int) domain.CarQuery {
+	t.Helper()
+
+	var size *int
+	if len(limit) > 0 {
+		size = &limit[0]
+	}
+
+	query, err := domain.NewCarQuery(owner, size, cursor)
+	require.NoError(t, err)
+
+	return query
+}

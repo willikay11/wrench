@@ -37,7 +37,10 @@ type fakeCarService struct {
 	received           domain.Car
 	receivedUpdatedCar domain.UpdateCar
 
+	receivedQuery domain.CarQuery
+
 	result domain.Car
+	page   domain.CarPage
 	err    error
 }
 
@@ -49,6 +52,16 @@ func (f *fakeCarService) CreateCar(_ context.Context, car domain.Car) (domain.Ca
 		return domain.Car{}, f.err
 	}
 	return f.result, nil
+}
+
+func (f *fakeCarService) ListCars(_ context.Context, query domain.CarQuery) (domain.CarPage, error) {
+	f.calls++
+	f.receivedQuery = query
+
+	if f.err != nil {
+		return domain.CarPage{}, f.err
+	}
+	return f.page, nil
 }
 
 func (f *fakeCarService) UpdateCar(_ context.Context, car domain.UpdateCar) (domain.Car, error) {
