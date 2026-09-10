@@ -169,3 +169,77 @@ func (r *carRepo) Update(ctx context.Context, updateCar domain.UpdateCar) (domai
 
 	return car, nil
 }
+
+// listCarsQuery walks the garage newest first. The keyset predicate compares
+// the (createdAt, id) pair as a tuple, which is what makes the page boundary
+// exact when several cars share a createdAt — a comparison on createdAt alone
+// would drop or repeat every row sharing the boundary instant.
+//
+// ORDER BY must match the tuple exactly, or the predicate and the ordering
+// disagree and rows go missing.
+const listCarsQuery = `
+	SELECT id, userId, make, model, year, engine, usageType, COALESCE(notes, ''), createdAt, updatedAt
+	FROM cars
+	WHERE userId = $1
+	  AND ($2::timestamptz IS NULL OR (createdAt, id) < ($2::timestamptz, $3::uuid))
+	ORDER BY createdAt DESC, id DESC
+	LIMIT $4`
+
+const countCarsQuery = `SELECT count(*) FROM cars WHERE userId = $1`
+
+func (r *carRepo) List(ctx context.Context, query domain.CarQuery) (domain.CarPage, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	// The cursor is a position, never an owner: userId comes from the query,
+	// which the handler filled from the token. A cursor naming another user's
+	// car narrows the page and can never widen it past this WHERE clause.
+	var after any
+	var afterId any
+	if query.Cursor != nil {
+		after = query.Cursor.CreatedAt
+		afterId = query.Cursor.Id
+	}
+
+	// One more row than asked for: its presence is what says there is another
+	// page, without a second query and without counting the whole table.
+	rows, err := from(ctx, r.db).Query(ctx, listCarsQuery, query.UserId, after, afterId, query.Limit+1)
+	if err != nil {
+		return domain.CarPage{}, fmt.Errorf("list cars: %w", err)
+	}
+	defer rows.Close()
+
+	cars := make([]domain.Car, 0, query.Limit)
+	for rows.Next() {
+		var car domain.Car
+		if err := rows.Scan(&car.Id, &car.UserId, &car.Make, &car.Model, &car.Year,
+			&car.Engine, &car.UsageType, &car.Notes, &car.CreatedAt, &car.UpdatedAt); err != nil {
+			return domain.CarPage{}, fmt.Errorf("scan car: %w", err)
+		}
+		cars = append(cars, car)
+	}
+	if err := rows.Err(); err != nil {
+		return domain.CarPage{}, fmt.Errorf("list cars: %w", err)
+	}
+
+	page := domain.CarPage{HasMore: len(cars) > query.Limit}
+	if page.HasMore {
+		cars = cars[:query.Limit]
+	}
+	page.Cars = cars
+
+	// Only when there is a further page: a nextCursor on the last page would
+	// have a client fetch an empty one to find out it had finished.
+	if page.HasMore {
+		last := cars[len(cars)-1]
+		page.NextCursor = &domain.CarCursor{CreatedAt: last.CreatedAt, Id: last.Id}
+	}
+
+	// Scoped to the same user as the page itself, so it can never report rows
+	// the caller cannot see.
+	if err := from(ctx, r.db).QueryRow(ctx, countCarsQuery, query.UserId).Scan(&page.Total); err != nil {
+		return domain.CarPage{}, fmt.Errorf("count cars: %w", err)
+	}
+
+	return page, nil
+}

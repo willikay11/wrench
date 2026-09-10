@@ -139,6 +139,7 @@ func main() {
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(CustomMiddleware.AuthenticateJWT(cfg.JWTSecret))
 
+		r.Get("/cars", carHandler.ListCars)
 		r.Post("/cars", carHandler.CreateCar)
 		r.Patch("/cars/{id}", carHandler.UpdateCar)
 	})

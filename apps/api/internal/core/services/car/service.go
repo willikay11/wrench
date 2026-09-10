@@ -38,3 +38,12 @@ func (s *service) UpdateCar(ctx context.Context, updateCar domain.UpdateCar) (do
 	}
 	return car, nil
 }
+
+func (s *service) ListCars(ctx context.Context, query domain.CarQuery) (domain.CarPage, error) {
+	page, err := s.carRepo.List(ctx, query)
+
+	if err != nil {
+		return domain.CarPage{}, err
+	}
+	return page, nil
+}
