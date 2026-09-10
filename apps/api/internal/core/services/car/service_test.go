@@ -30,8 +30,9 @@ once per error value.
 // mockCarRepo records the car it was given, so a test can assert on what the
 // service sent down rather than only on what came back.
 type mockCarRepo struct {
-	calls    int
-	received domain.Car
+	calls             int
+	received          domain.Car
+	receiveUpdatedCar domain.UpdateCar
 
 	result domain.Car
 	err    error
@@ -40,6 +41,16 @@ type mockCarRepo struct {
 func (m *mockCarRepo) Save(_ context.Context, car domain.Car) (domain.Car, error) {
 	m.calls++
 	m.received = car
+
+	if m.err != nil {
+		return domain.Car{}, m.err
+	}
+	return m.result, nil
+}
+
+func (m *mockCarRepo) Update(_ context.Context, car domain.UpdateCar) (domain.Car, error) {
+	m.calls++
+	m.receiveUpdatedCar = car
 
 	if m.err != nil {
 		return domain.Car{}, m.err
@@ -131,3 +142,49 @@ func TestCreateCarDoesNotInventADomainErrorForAnUnknownFailure(t *testing.T) {
 		require.NotErrorIs(t, err, rule)
 	}
 }
+
+// UpdateCar is the same pass-through as CreateCar, over the partial type: the
+// update reaches the repository as the caller built it, and the repository's
+// answer reaches the caller unchanged.
+func TestUpdateCarPassesThePartialUpdateToTheRepository(t *testing.T) {
+	update := domain.UpdateCar{
+		Id:     uuid.New(),
+		UserId: uuid.New(),
+		Make:   ptr("Subaru"),
+		Year:   ptr(2004),
+		Notes:  domain.Nullable[string]{Sent: true, Value: nil},
+	}
+	stored := aCar()
+	stored.Id = update.Id
+
+	repo := &mockCarRepo{result: stored}
+
+	got, err := newService(repo).UpdateCar(t.Context(), update)
+
+	require.NoError(t, err)
+	require.Equal(t, stored, got)
+
+	require.Equal(t, 1, repo.calls)
+	// Including the three-state notes, which is the field a pass-through is
+	// most likely to flatten.
+	require.Equal(t, update, repo.receiveUpdatedCar)
+	require.True(t, repo.receiveUpdatedCar.Notes.Sent)
+	require.Nil(t, repo.receiveUpdatedCar.Notes.Value)
+}
+
+func TestUpdateCarForwardsRepositoryErrorsUnchanged(t *testing.T) {
+	for _, want := range []error{
+		domain.ErrCarNotFound,
+		domain.ErrNoFieldsToUpdate,
+		domain.ErrInvalidUsageType,
+	} {
+		repo := &mockCarRepo{err: fmt.Errorf("update car entry: %w", want)}
+
+		got, err := newService(repo).UpdateCar(t.Context(), domain.UpdateCar{Make: ptr("Subaru")})
+
+		require.ErrorIs(t, err, want)
+		require.Equal(t, domain.Car{}, got)
+	}
+}
+
+func ptr[T any](v T) *T { return &v }

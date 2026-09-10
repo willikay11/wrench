@@ -1,6 +1,7 @@
 package rest_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,8 +10,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 
 	"github.com/willikay11/wrench/api/internal/core/domain"
@@ -29,8 +33,9 @@ already covered by internal/core/services/car; nothing here re-tests it.
 // fakeCarService records what the handler passed down, so a test can assert on
 // the car the service would have persisted rather than only on the response.
 type fakeCarService struct {
-	calls    int
-	received domain.Car
+	calls              int
+	received           domain.Car
+	receivedUpdatedCar domain.UpdateCar
 
 	result domain.Car
 	err    error
@@ -39,6 +44,16 @@ type fakeCarService struct {
 func (f *fakeCarService) CreateCar(_ context.Context, car domain.Car) (domain.Car, error) {
 	f.calls++
 	f.received = car
+
+	if f.err != nil {
+		return domain.Car{}, f.err
+	}
+	return f.result, nil
+}
+
+func (f *fakeCarService) UpdateCar(_ context.Context, car domain.UpdateCar) (domain.Car, error) {
+	f.calls++
+	f.receivedUpdatedCar = car
 
 	if f.err != nil {
 		return domain.Car{}, f.err
@@ -235,10 +250,29 @@ func TestCreateCarReportsEachInvalidFieldByItsJSONName(t *testing.T) {
 			reason: "This field must be at least 3 characters",
 		},
 		{
+			name:   "make above the maximum length",
+			mutate: func(b map[string]any) { b["make"] = strings.Repeat("x", 51) },
+			field:  "make",
+			reason: "This field must be at most 50 characters",
+		},
+		{
 			name:   "model above the maximum length",
 			mutate: func(b map[string]any) { b["model"] = strings.Repeat("x", 51) },
 			field:  "model",
 			reason: "This field must be at most 50 characters",
+		},
+		{
+			name:   "engine above the maximum length",
+			mutate: func(b map[string]any) { b["engine"] = strings.Repeat("x", 101) },
+			field:  "engine",
+			reason: "This field must be at most 100 characters",
+		},
+		{
+			// The only free-text field, so the one a paste can overflow.
+			name:   "notes above the maximum length",
+			mutate: func(b map[string]any) { b["notes"] = strings.Repeat("x", 1001) },
+			field:  "notes",
+			reason: "This field must be at most 1000 characters",
 		},
 		{
 			// A zero year is indistinguishable from an absent one on an int, so
@@ -262,9 +296,21 @@ func TestCreateCarReportsEachInvalidFieldByItsJSONName(t *testing.T) {
 			reason: "This field must be 2030 or less",
 		},
 		{
+			name:   "missing model",
+			mutate: func(b map[string]any) { delete(b, "model") },
+			field:  "model",
+			reason: "This field is required",
+		},
+		{
 			name:   "missing engine",
 			mutate: func(b map[string]any) { delete(b, "engine") },
 			field:  "engine",
+			reason: "This field is required",
+		},
+		{
+			name:   "missing usage type",
+			mutate: func(b map[string]any) { delete(b, "usageType") },
+			field:  "usageType",
 			reason: "This field is required",
 		},
 		{
@@ -467,4 +513,222 @@ func TestCreateCarSeesThroughWrappedDomainErrors(t *testing.T) {
 		[]rest.InvalidParam{{Name: "year", Reason: "This field must be between 1885 and 2030"}},
 		decodeProblem(t, recorder).InvalidParams,
 	)
+}
+
+// A field the endpoint does not define is a client mistake, and the two ways it
+// happens — a typo and a field meant for somewhere else — are both better
+// answered than ignored. Before DisallowUnknownFields these bodies returned 201
+// with the unknown field quietly dropped.
+func TestCreateCarRejectsFieldsItDoesNotDefine(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(body map[string]any)
+	}{
+		{
+			// The failure this actually prevents: the car is created with no
+			// make, and the client is told "make is required" for a body it
+			// believes carried one.
+			name:   "a misspelled field",
+			mutate: func(b map[string]any) { delete(b, "make"); b["mak"] = "Mitsubishi" },
+		},
+		{
+			name:   "a field this endpoint has no use for",
+			mutate: func(b map[string]any) { b["colour"] = "red" },
+		},
+		{
+			name:   "a field belonging to another resource",
+			mutate: func(b map[string]any) { b["modId"] = uuid.New().String() },
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			service := &fakeCarService{}
+
+			body := validCar()
+			tc.mutate(body)
+
+			recorder := postJSON(t, rest.NewCarHandler(service), uuid.New(), body)
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+			problem := decodeProblem(t, recorder)
+			require.Equal(t, "/problems/malformed-body", problem.Type)
+			require.Contains(t, problem.Detail, "only the fields this endpoint defines")
+			require.Zero(t, service.calls)
+		})
+	}
+}
+
+// json.Decoder reads one value and stops, so without a More check everything
+// after the first object is discarded in silence — the client is told 201 for a
+// request the server only half read.
+func TestCreateCarRejectsAnythingAfterTheFirstObject(t *testing.T) {
+	valid := `{"make":"Mitsubishi","model":"Evolution 10","year":2018,"engine":"4B11T","usageType":"weekend"}`
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{name: "a second object", body: valid + `{"make":"Subaru","model":"Impreza","year":2004,"engine":"EJ257","usageType":"track"}`},
+		{name: "a trailing array", body: valid + ` [1,2,3]`},
+		{name: "trailing junk", body: valid + `<<<not json at all`},
+		{name: "a repeated body", body: valid + "\n" + valid},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			service := &fakeCarService{}
+
+			recorder := post(t, rest.NewCarHandler(service), uuid.New(), tc.body)
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+			problem := decodeProblem(t, recorder)
+			require.Equal(t, "/problems/malformed-body", problem.Type)
+			require.Equal(t, "The body must contain exactly one JSON object.", problem.Detail)
+			// The half that parsed is not saved on the strength of parsing.
+			require.Zero(t, service.calls)
+		})
+	}
+}
+
+// Trailing whitespace and a newline are not trailing content — a body written
+// by a file, a shell heredoc or a pretty-printer must still be accepted.
+func TestCreateCarAcceptsTrailingWhitespace(t *testing.T) {
+	valid := `{"make":"Mitsubishi","model":"Evolution 10","year":2018,"engine":"4B11T","usageType":"weekend"}`
+
+	for _, tail := range []string{"", "\n", "  \n\t ", "\r\n"} {
+		service := &fakeCarService{}
+
+		recorder := post(t, rest.NewCarHandler(service), uuid.New(), valid+tail)
+
+		require.Equal(t, http.StatusCreated, recorder.Code, "tail %q", tail)
+		require.Equal(t, 1, service.calls)
+	}
+}
+
+// The fields a caller may send but not control are still fields this endpoint
+// defines, so strict decoding must not turn the ignore-them rule into a 400.
+func TestCreateCarStillAcceptsAndIgnoresOwnershipFields(t *testing.T) {
+	userID := uuid.New()
+	service := &fakeCarService{}
+
+	body := validCar()
+	body["userId"] = uuid.New().String()
+	body["id"] = uuid.New().String()
+
+	recorder := postJSON(t, rest.NewCarHandler(service), userID, body)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+	require.Equal(t, userID, service.received.UserId)
+}
+
+// The rejecting boundaries have their own cases above. These are the accepting
+// ones: an off-by-one in the tag would show up here and nowhere else, since
+// 1884 and 2031 stay rejected either way.
+func TestCreateCarAcceptsTheYearRangeBoundaries(t *testing.T) {
+	for _, year := range []int{1885, 2030} {
+		service := &fakeCarService{}
+
+		body := validCar()
+		body["year"] = year
+
+		recorder := postJSON(t, rest.NewCarHandler(service), uuid.New(), body)
+
+		require.Equal(t, http.StatusCreated, recorder.Code, "year %d", year)
+		require.Equal(t, year, service.received.Year)
+	}
+}
+
+// standards.logging: a failure must be traceable to the user whose request
+// caused it, by UUID — and the email must never appear, here or anywhere.
+func TestCreateCarFailuresAreLoggedAgainstTheUser(t *testing.T) {
+	var buf bytes.Buffer
+	original := log.Logger
+	log.Logger = zerolog.New(&buf)
+	t.Cleanup(func() { log.Logger = original })
+
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "a server fault", err: errors.New("dial tcp: connection refused"), want: "Failed to create car"},
+		{name: "a database rule", err: domain.ErrInvalidYear, want: "Car rejected by the database after passing validation"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			buf.Reset()
+			userID := uuid.New()
+
+			postJSON(t, rest.NewCarHandler(&fakeCarService{err: tc.err}), userID, validCar())
+
+			require.NotZero(t, buf.Len(), "nothing was logged")
+
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal(buf.Bytes(), &entry))
+			require.Equal(t, tc.want, entry["message"])
+			// The id of the user whose request failed, as a UUID.
+			require.Equal(t, userID.String(), entry["userId"])
+			// No PII: an email would have to reach the log line to appear here,
+			// and nothing on this path should ever put one there.
+			require.NotContains(t, buf.String(), "@")
+		})
+	}
+}
+
+// A handler reached without the middleware has no user to name, and a log line
+// must not panic reaching for one — withUser omits the field instead.
+func TestCarLoggingOmitsTheUserRatherThanPanicking(t *testing.T) {
+	var buf bytes.Buffer
+	original := log.Logger
+	log.Logger = zerolog.New(&buf)
+	t.Cleanup(func() { log.Logger = original })
+
+	encoded, err := json.Marshal(validCar())
+	require.NoError(t, err)
+
+	request := httptest.NewRequest(http.MethodPost, "/v1/cars", strings.NewReader(string(encoded)))
+	recorder := httptest.NewRecorder()
+
+	// MustUserID still panics — that guard is tested separately. What matters
+	// here is that nothing logged on the way in tried to read a user first.
+	require.Panics(t, func() {
+		rest.NewCarHandler(&fakeCarService{}).CreateCar(recorder, request)
+	})
+	require.NotContains(t, buf.String(), "userId")
+}
+
+// createdAt and updatedAt are part of the response contract, and are the
+// database's to set. They have json tags, so a client can send them — and
+// must not be able to backdate a car by doing so.
+func TestCreateCarReturnsServerSetTimestampsAndIgnoresSentOnes(t *testing.T) {
+	stored := time.Date(2026, 9, 10, 8, 0, 0, 0, time.UTC)
+	created := domain.Car{
+		Id: uuid.New(), Make: "Mitsubishi", Model: "Evolution 10", Year: 2018,
+		Engine: "4B11T", UsageType: "weekend",
+		CreatedAt: stored, UpdatedAt: stored,
+	}
+	service := &fakeCarService{result: created}
+
+	body := validCar()
+	// A caller trying to choose its own timestamps.
+	body["createdAt"] = "1999-01-01T00:00:00Z"
+	body["updatedAt"] = "1999-01-01T00:00:00Z"
+
+	recorder := postJSON(t, rest.NewCarHandler(service), uuid.New(), body)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+
+	var got domain.Car
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &got))
+	// The response carries what the repository stored, not what was sent.
+	require.True(t, stored.Equal(got.CreatedAt), "createdAt %v", got.CreatedAt)
+	require.True(t, stored.Equal(got.UpdatedAt), "updatedAt %v", got.UpdatedAt)
+
+	// Both are present in the JSON, since a client reads them by name.
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &raw))
+	require.Contains(t, raw, "createdAt")
+	require.Contains(t, raw, "updatedAt")
 }

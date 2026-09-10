@@ -20,6 +20,7 @@ const (
 	typeBlank            = "about:blank"
 	typeValidationFailed = "/problems/validation-failed"
 	typeMalformedBody    = "/problems/malformed-body"
+	typeMalformedParam   = "/problems/malformed-param"
 )
 
 // Problem is an RFC 7807 problem details object.

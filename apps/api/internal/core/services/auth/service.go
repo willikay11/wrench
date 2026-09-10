@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/coreos/go-oidc"
@@ -141,6 +142,7 @@ func (s *service) LoginWithGoogle(ctx context.Context, code string, verifier str
 		if err != nil {
 			return err
 		}
+		fmt.Println("token: ", jwtToken)
 
 		loggedInUser = domain.LoggedInUser{
 			AccessToken:  jwtToken,

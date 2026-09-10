@@ -1,7 +1,9 @@
 package domain
 
 import (
+	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -15,6 +17,76 @@ type Car struct {
 	Engine    string    `json:"engine" validate:"required,min=3,max=100"`
 	UsageType string    `json:"usageType" validate:"required,oneof=daily track show weekend off-road project"`
 	Notes     string    `json:"notes" validate:"omitempty,min=3,max=1000"`
+
+	// Set by the database, never by the caller: both are filled from the
+	// statement's RETURNING clause, so anything a client sends under these
+	// names is overwritten before the car leaves the repository.
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// Nullable carries the three states a PATCH body can express for one field:
+// absent, present with a value, and present as JSON null. A plain pointer only
+// carries two — an omitted key and an explicit null both decode to nil — which
+// is the difference between "leave this alone" and "clear this".
+type Nullable[T any] struct {
+	// Sent reports that the key appeared in the body at all.
+	Sent bool
+	// Value is nil when the key was sent as null.
+	Value *T
+}
+
+// UnmarshalJSON is only called for a key that is present, which is what makes
+// Sent meaningful: a field the body omitted is left at its zero value.
+func (n *Nullable[T]) UnmarshalJSON(data []byte) error {
+	n.Sent = true
+
+	if string(data) == "null" {
+		n.Value = nil
+		return nil
+	}
+
+	var value T
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	n.Value = &value
+
+	return nil
+}
+
+// Get returns the value and whether there is one to write.
+func (n Nullable[T]) Get() (T, bool) {
+	var zero T
+	if n.Value == nil {
+		return zero, false
+	}
+	return *n.Value, true
+}
+
+// UpdateCar is a partial update: every field is optional, and a field left out
+// is not written at all. Only notes is nullable in the schema, so it is the
+// only one that needs all three states; the rest cannot meaningfully be set to
+// null and use a plain pointer.
+type UpdateCar struct {
+	Id     uuid.UUID `json:"id"`
+	UserId uuid.UUID `json:"userId"`
+
+	Make      *string `json:"make" validate:"omitempty,min=3,max=50"`
+	Model     *string `json:"model" validate:"omitempty,min=3,max=50"`
+	Year      *int    `json:"year" validate:"omitempty,gte=1885,lte=2030"`
+	Engine    *string `json:"engine" validate:"omitempty,min=3,max=100"`
+	UsageType *string `json:"usageType" validate:"omitempty,oneof=daily track show weekend off-road project"`
+
+	Notes Nullable[string] `json:"notes" validate:"omitempty,min=3,max=1000"`
+}
+
+// HasChanges reports whether the body asked for anything to be written. A
+// PATCH that names no field is a client mistake rather than a no-op: nothing
+// it intended has happened, and a 200 would say otherwise.
+func (u UpdateCar) HasChanges() bool {
+	return u.Make != nil || u.Model != nil || u.Year != nil ||
+		u.Engine != nil || u.UsageType != nil || u.Notes.Sent
 }
 
 // The database enforces these same rules as a backstop, so a Save can fail
@@ -26,7 +98,8 @@ var (
 	ErrInvalidYear      = errors.New("invalid year")
 	ErrMissingField     = errors.New("missing required field")
 	ErrFieldTooLong     = errors.New("field too long")
-
+	ErrCarNotFound      = errors.New("car not found")
+	ErrNoFieldsToUpdate = errors.New("no fields to update")
 	// ErrUnknownOwner is not a field problem: it means the authenticated user
 	// no longer exists, so the request is unauthenticated rather than invalid.
 	ErrUnknownOwner = errors.New("unknown owner")
