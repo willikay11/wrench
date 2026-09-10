@@ -29,3 +29,12 @@ func (s *service) CreateCar(ctx context.Context, car domain.Car) (domain.Car, er
 	}
 	return car, nil
 }
+
+func (s *service) UpdateCar(ctx context.Context, updateCar domain.UpdateCar) (domain.Car, error) {
+	car, err := s.carRepo.Update(ctx, updateCar)
+
+	if err != nil {
+		return domain.Car{}, err
+	}
+	return car, nil
+}

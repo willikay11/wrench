@@ -140,6 +140,7 @@ func main() {
 		r.Use(CustomMiddleware.AuthenticateJWT(cfg.JWTSecret))
 
 		r.Post("/cars", carHandler.CreateCar)
+		r.Patch("/cars/{id}", carHandler.UpdateCar)
 	})
 
 	// Server with timeouts

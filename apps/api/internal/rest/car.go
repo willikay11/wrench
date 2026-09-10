@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,7 +9,10 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/willikay11/wrench/api/internal/core/domain"
 	"github.com/willikay11/wrench/api/internal/core/ports"
@@ -30,6 +34,17 @@ func newValidator() *validator.Validate {
 		}
 		return name
 	})
+
+	// validator cannot see inside Nullable, so it is unwrapped to the value the
+	// tags are written against. A field sent as null unwraps to the zero value,
+	// which omitempty then skips — clearing a field is not a length violation.
+	v.RegisterCustomTypeFunc(func(field reflect.Value) any {
+		notes, ok := field.Interface().(domain.Nullable[string])
+		if !ok || notes.Value == nil {
+			return ""
+		}
+		return *notes.Value
+	}, domain.Nullable[string]{})
 
 	return v
 }
@@ -128,6 +143,25 @@ func carWriteProblem(err error) (Problem, bool) {
 			Detail: "A field was longer than the maximum allowed.",
 		}, true
 
+	// A car that does not exist and a car belonging to someone else are the
+	// same answer on purpose: a 403 here would confirm that the id is real and
+	// let a caller enumerate other users' cars (standards.ownership).
+	case errors.Is(err, domain.ErrCarNotFound):
+		return Problem{
+			Status: http.StatusNotFound,
+			Detail: "No car with that id.",
+		}, true
+
+	// Nothing was asked for, so nothing happened — a 200 would report a change
+	// that was never made.
+	case errors.Is(err, domain.ErrNoFieldsToUpdate):
+		return Problem{
+			Type:   typeValidationFailed,
+			Title:  "The car details did not validate",
+			Status: http.StatusUnprocessableEntity,
+			Detail: "Provide at least one field to update.",
+		}, true
+
 	// The owner comes from the token, never from the body, so an owner the
 	// database does not have means the account is gone — the caller cannot fix
 	// that by editing the car, only by signing in again.
@@ -136,9 +170,43 @@ func carWriteProblem(err error) (Problem, bool) {
 			Status: http.StatusUnauthorized,
 			Detail: "This account no longer exists. Please sign in again.",
 		}, true
+
+	case errors.Is(err, domain.ErrCarNotFound):
+		return Problem{
+			Status: http.StatusNotFound,
+			Detail: "This car does not exist",
+		}, true
+
 	}
 
 	return Problem{}, false
+}
+
+// withUser adds the authenticated user to a log event, so a failure can be
+// traced to the request that caused it. The UUID and never the email, which is
+// PII and must stay out of the logs entirely.
+//
+// UserIDFrom rather than MustUserID: emitting a log line must not panic, and
+// the earliest failures here are logged before the id has been read off the
+// context. When there is none the field is simply absent.
+func withUser(event *zerolog.Event, ctx context.Context) *zerolog.Event {
+	if userID, ok := domain.UserIDFrom(ctx); ok {
+		return event.Str("userId", userID.String())
+	}
+	return event
+}
+
+// malformedBody is the response for a body the endpoint could not take as a
+// whole: unreadable, carrying a field it does not define, or holding more than
+// the single object it expects. Detail says which, while the type and title
+// stay the same for all of them — the client's fix is the same in every case.
+func malformedBody(detail string) Problem {
+	return Problem{
+		Type:   typeMalformedBody,
+		Title:  "The request body could not be read",
+		Status: http.StatusBadRequest,
+		Detail: detail,
+	}
 }
 
 type CarHandler struct {
@@ -156,15 +224,23 @@ func (h *CarHandler) CreateCar(w http.ResponseWriter, r *http.Request) {
 
 	body := http.MaxBytesReader(w, r.Body, 1048576) // Limit request body to 1MB
 
-	decodeErr := json.NewDecoder(body).Decode(&request)
+	decoder := json.NewDecoder(body)
 
-	if decodeErr != nil {
-		writeProblem(w, r, Problem{
-			Type:   typeMalformedBody,
-			Title:  "The request body could not be read",
-			Status: http.StatusBadRequest,
-			Detail: "The body must be a JSON object describing the car.",
-		})
+	// A field this endpoint does not define is a client mistake — a typo, or a
+	// field meant for a different endpoint. Dropping it silently answers 201 to
+	// a request that did not say what the client thought it said.
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&request); err != nil {
+		writeProblem(w, r, malformedBody("The body must be a JSON object describing the car, using only the fields this endpoint defines."))
+		return
+	}
+
+	// Decode stops at the end of the first JSON value and ignores the rest, so
+	// a body carrying two objects, or one object and a tail of junk, would
+	// otherwise be accepted on the strength of the part that happened to parse.
+	if decoder.More() {
+		writeProblem(w, r, malformedBody("The body must contain exactly one JSON object."))
 		return
 	}
 
@@ -172,7 +248,7 @@ func (h *CarHandler) CreateCar(w http.ResponseWriter, r *http.Request) {
 		var validateErrs validator.ValidationErrors
 		if !errors.As(err, &validateErrs) {
 			// Not the caller's fault: a bad tag or an unsupported type.
-			log.Error().Err(err).Msg("Failed to validate car payload")
+			withUser(log.Error().Err(err), r.Context()).Msg("Failed to validate car payload")
 			serverProblem(w, r)
 			return
 		}
@@ -196,15 +272,100 @@ func (h *CarHandler) CreateCar(w http.ResponseWriter, r *http.Request) {
 			// reaching here means a rule is enforced in only one of the two
 			// places. Logged as a warning: the caller is answered correctly, but
 			// the mismatch is ours to fix.
-			log.Warn().Err(err).Msg("Car rejected by the database after passing validation")
+			withUser(log.Warn().Err(err), r.Context()).Msg("Car rejected by the database after passing validation")
 			writeProblem(w, r, problem)
 			return
 		}
 
-		log.Error().Err(err).Msg("Failed to create car")
+		withUser(log.Error().Err(err), r.Context()).Msg("Failed to create car")
 		serverProblem(w, r)
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, car)
+}
+
+func (h *CarHandler) UpdateCar(w http.ResponseWriter, r *http.Request) {
+	var request domain.UpdateCar
+
+	body := http.MaxBytesReader(w, r.Body, 1048576) // Limit request body to 1MB
+
+	decoder := json.NewDecoder(body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&request); err != nil {
+		writeProblem(w, r, malformedBody("The body must be a JSON object describing the car, using only the fields this endpoint defines."))
+		return
+	}
+
+	if decoder.More() {
+		writeProblem(w, r, malformedBody("The body must contain exactly one JSON object."))
+		return
+	}
+
+	if err := validate.Struct(request); err != nil {
+		var validateErrs validator.ValidationErrors
+		if !errors.As(err, &validateErrs) {
+			// Not the caller's fault: a bad tag or an unsupported type.
+			withUser(log.Error().Err(err), r.Context()).Msg("Failed to validate car payload")
+			serverProblem(w, r)
+			return
+		}
+
+		writeProblem(w, r, Problem{
+			Type:          typeValidationFailed,
+			Title:         "The car details did not validate",
+			Status:        http.StatusUnprocessableEntity,
+			InvalidParams: invalidParams(validateErrs),
+		})
+		return
+	}
+
+	// Caught here as well as in the repository: the answer is the same, and a
+	// body that asks for nothing does not need a database round trip to refuse.
+	if !request.HasChanges() {
+		writeProblem(w, r, Problem{
+			Type:   typeValidationFailed,
+			Title:  "The car details did not validate",
+			Status: http.StatusUnprocessableEntity,
+			Detail: "Provide at least one field to update.",
+		})
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+
+	uId, err := uuid.Parse(id)
+
+	if err != nil {
+		writeProblem(w, r, Problem{
+			Type:   typeMalformedParam,
+			Title:  "The param could not be read",
+			Status: http.StatusNotFound,
+			Detail: "The param must be a UUID.",
+		})
+		return
+	}
+	request.Id = uId
+	request.UserId = domain.MustUserID(r.Context())
+
+	car, err := h.carService.UpdateCar(r.Context(), request)
+
+	if err != nil {
+		if problem, known := carWriteProblem(err); known {
+			// The validate tags above should have caught every one of these, so
+			// reaching here means a rule is enforced in only one of the two
+			// places. Logged as a warning: the caller is answered correctly, but
+			// the mismatch is ours to fix.
+			withUser(log.Warn().Err(err), r.Context()).Msg("Car rejected by the database after passing validation")
+			writeProblem(w, r, problem)
+			return
+		}
+
+		withUser(log.Error().Err(err), r.Context()).Msg("Failed to update car")
+		serverProblem(w, r)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, car)
 }

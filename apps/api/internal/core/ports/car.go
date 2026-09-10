@@ -9,9 +9,11 @@ import (
 // Driving
 type CarService interface {
 	CreateCar(ctx context.Context, car domain.Car) (domain.Car, error)
+	UpdateCar(ctx context.Context, updateCar domain.UpdateCar) (domain.Car, error)
 }
 
 // Driven - core calls out through this.
 type CarRepository interface {
 	Save(ctx context.Context, car domain.Car) (domain.Car, error)
+	Update(ctx context.Context, car domain.UpdateCar) (domain.Car, error)
 }
