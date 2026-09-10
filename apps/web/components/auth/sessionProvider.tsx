@@ -1,8 +1,16 @@
-'use client';
+'use client'
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 
-import { isWrenchSession, SESSION_ENDPOINT, type WrenchSession } from "@/lib/auth/session";
+import { isWrenchSession, SESSION_ENDPOINT, type WrenchSession } from '@/lib/auth/session'
 
 /**
  * Holds the signed-in session in memory, and nowhere else.
@@ -15,57 +23,98 @@ import { isWrenchSession, SESSION_ENDPOINT, type WrenchSession } from "@/lib/aut
  */
 
 type SessionState = {
-    session: WrenchSession | null;
-    /** True until the one-time handoff has been asked for. */
-    isLoading: boolean;
-};
+  session: WrenchSession | null
+  /** True until the one-time handoff has been asked for. */
+  isLoading: boolean
+}
 
-const SessionContext = createContext<SessionState>({ session: null, isLoading: true });
+type SessionValue = SessionState & {
+  /**
+   * Mints a fresh access token from the refresh cookie and returns it.
+   *
+   * The access token expires in 15 minutes while a screen can stay open for
+   * hours, so a request that comes back 401 is ordinary rather than
+   * exceptional. Callers use this to retry once before giving up. Null means
+   * the refresh token is gone too, and the answer is to sign in again.
+   */
+  refresh: () => Promise<string | null>
+}
+
+const SessionContext = createContext<SessionValue>({
+  session: null,
+  isLoading: true,
+  refresh: async () => null,
+})
 
 const SessionProvider = ({ children }: { children: ReactNode }) => {
-    const [state, setState] = useState<SessionState>({ session: null, isLoading: true });
+  const [state, setState] = useState<SessionState>({ session: null, isLoading: true })
 
-    useEffect(() => {
-        // Guards against the effect firing twice in strict mode: the handoff
-        // is single-use, so the second call would find nothing and blank a
-        // session the first call had already loaded.
-        let active = true;
+  useEffect(() => {
+    // Guards against the effect firing twice in strict mode: the handoff
+    // is single-use, so the second call would find nothing and blank a
+    // session the first call had already loaded.
+    let active = true
 
-        const load = async () => {
-            try {
-                const response = await fetch(SESSION_ENDPOINT, { cache: "no-store" });
+    const load = async () => {
+      try {
+        const response = await fetch(SESSION_ENDPOINT, { cache: 'no-store' })
 
-                // 204 is the ordinary "not signed in" answer, not a failure.
-                if (!response.ok || response.status === 204) {
-                    if (active) setState({ session: null, isLoading: false });
-                    return;
-                }
+        // 204 is the ordinary "not signed in" answer, not a failure.
+        if (!response.ok || response.status === 204) {
+          if (active) setState({ session: null, isLoading: false })
+          return
+        }
 
-                const payload: unknown = await response.json();
+        const payload: unknown = await response.json()
 
-                if (active) {
-                    setState({
-                        session: isWrenchSession(payload) ? payload : null,
-                        isLoading: false,
-                    });
-                }
-            } catch {
-                // A failed handoff is a signed-out page, not an error screen.
-                if (active) setState({ session: null, isLoading: false });
-            }
-        };
+        if (active) {
+          setState({
+            session: isWrenchSession(payload) ? payload : null,
+            isLoading: false,
+          })
+        }
+      } catch {
+        // A failed handoff is a signed-out page, not an error screen.
+        if (active) setState({ session: null, isLoading: false })
+      }
+    }
 
-        void load();
+    void load()
 
-        return () => {
-            active = false;
-        };
-    }, []);
+    return () => {
+      active = false
+    }
+  }, [])
 
-    return <SessionContext.Provider value={state}>{children}</SessionContext.Provider>;
-};
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetch(SESSION_ENDPOINT, { cache: 'no-store' })
 
-const useSession = () => useContext(SessionContext);
+      if (!response.ok || response.status === 204) {
+        setState({ session: null, isLoading: false })
+        return null
+      }
 
-export { SessionProvider, useSession };
-export type { SessionState };
+      const payload: unknown = await response.json()
+
+      if (!isWrenchSession(payload)) {
+        setState({ session: null, isLoading: false })
+        return null
+      }
+
+      setState({ session: payload, isLoading: false })
+      return payload.accessToken
+    } catch {
+      return null
+    }
+  }, [])
+
+  const value = useMemo(() => ({ ...state, refresh }), [state, refresh])
+
+  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
+}
+
+const useSession = () => useContext(SessionContext)
+
+export { SessionProvider, useSession }
+export type { SessionState }
