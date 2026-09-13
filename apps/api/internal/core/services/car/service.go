@@ -2,8 +2,10 @@ package car
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 
 	"github.com/willikay11/wrench/api/internal/core/domain"
 	"github.com/willikay11/wrench/api/internal/core/ports"
@@ -12,16 +14,25 @@ import (
 type service struct {
 	carRepo   ports.CarRepository
 	catalogue ports.CatalogueRepository
+	media     ports.MediaStore
+	images    ports.ImageLocator
 	txManager ports.TxManager
 }
 
+// NewService builds the car service. media and images may be nil when media
+// storage is not configured: cars are then shown with no photo, and uploads
+// are refused as unavailable rather than failing some other way.
 func NewService(
 	carRepo ports.CarRepository,
 	catalogue ports.CatalogueRepository,
+	media ports.MediaStore,
+	images ports.ImageLocator,
 	txManager ports.TxManager) *service {
 	return &service{
 		carRepo:   carRepo,
 		catalogue: catalogue,
+		media:     media,
+		images:    images,
 		txManager: txManager,
 	}
 }
@@ -40,6 +51,8 @@ func (s *service) CreateCar(ctx context.Context, car domain.Car) (domain.Car, er
 	if err != nil {
 		return domain.Car{}, err
 	}
+
+	s.resolvePhoto(&car)
 	return car, nil
 }
 
@@ -59,6 +72,8 @@ func (s *service) UpdateCar(ctx context.Context, updateCar domain.UpdateCar) (do
 		if err != nil {
 			return domain.Car{}, err
 		}
+
+		s.resolvePhoto(&car)
 		return car, nil
 	}
 
@@ -98,6 +113,8 @@ func (s *service) UpdateCar(ctx context.Context, updateCar domain.UpdateCar) (do
 	if err != nil {
 		return domain.Car{}, err
 	}
+
+	s.resolvePhoto(&car)
 	return car, nil
 }
 
@@ -107,7 +124,103 @@ func (s *service) ListCars(ctx context.Context, query domain.CarQuery) (domain.C
 	if err != nil {
 		return domain.CarPage{}, err
 	}
+
+	for i := range page.Cars {
+		s.resolvePhoto(&page.Cars[i])
+	}
 	return page, nil
+}
+
+// SetCarPhoto stores an image as the car's primary photo.
+//
+// The order is what keeps it safe:
+//  1. Ownership is checked before a byte is sent to media storage, so nothing
+//     is ever uploaded against someone else's car.
+//  2. The image is uploaded.
+//  3. The record is written in a transaction that re-checks ownership with the
+//     row locked, so a car deleted mid-upload is caught, and two concurrent
+//     uploads cannot both become the primary photo.
+//  4. If the record cannot be written, the new asset is deleted — no image is
+//     left in storage that nothing points at.
+//  5. Once the record has committed, the replaced asset is deleted, best-effort.
+func (s *service) SetCarPhoto(ctx context.Context, carId, userId uuid.UUID, image []byte) (domain.CarPhoto, error) {
+	if s.media == nil {
+		return domain.CarPhoto{}, domain.ErrMediaUnavailable
+	}
+
+	if _, err := s.carRepo.GetForUpdate(ctx, carId, userId); err != nil {
+		return domain.CarPhoto{}, err
+	}
+
+	stored, err := s.media.UploadCarPhoto(ctx, carId, image)
+	if err != nil {
+		return domain.CarPhoto{}, fmt.Errorf("store car photo: %w", err)
+	}
+
+	var previous *string
+
+	err = s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
+		if _, err := s.carRepo.GetForUpdate(ctx, carId, userId); err != nil {
+			return err
+		}
+
+		var err error
+		previous, err = s.carRepo.SetPrimaryPhoto(ctx, carId, stored)
+		return err
+	})
+	if err != nil {
+		// Detached from the request: a cancelled request is exactly the case
+		// where this cleanup must still run.
+		if cleanupErr := s.media.Delete(context.WithoutCancel(ctx), stored.PublicId); cleanupErr != nil {
+			log.Error().Err(cleanupErr).Str("carId", carId.String()).
+				Msg("Could not remove a photo whose record failed; it is orphaned in media storage")
+		}
+		return domain.CarPhoto{}, err
+	}
+
+	if previous != nil {
+		if err := s.media.Delete(context.WithoutCancel(ctx), *previous); err != nil {
+			// The new photo is in place; the old asset only costs storage. It is
+			// worth knowing about, not worth failing the request for.
+			log.Warn().Err(err).Str("carId", carId.String()).
+				Msg("Could not delete a replaced car photo; it is orphaned in media storage")
+		}
+	}
+
+	url, err := s.media.SignedURL(stored.PublicId)
+	if err != nil {
+		return domain.CarPhoto{}, fmt.Errorf("sign car photo: %w", err)
+	}
+
+	return domain.CarPhoto{Url: url, Source: domain.PhotoSourceUpload}, nil
+}
+
+// resolvePhoto sets the image a car is shown with, in one order: the owner's
+// upload, then the linked generation's catalogue image, then none — which the
+// client shows as the body-style silhouette (ADR-010).
+//
+// It always overwrites Photo, so a value that arrived in a request body never
+// survives to the response. A catalogue image without its attribution and
+// licence is skipped rather than shown uncredited.
+func (s *service) resolvePhoto(car *domain.Car) {
+	car.Photo = nil
+
+	if car.PhotoPublicId != nil && s.media != nil {
+		if url, err := s.media.SignedURL(*car.PhotoPublicId); err == nil {
+			car.Photo = &domain.CarPhoto{Url: url, Source: domain.PhotoSourceUpload}
+			return
+		}
+	}
+
+	image := car.CatalogueImage
+	if image == nil || image.Attribution == "" || image.License == "" || s.images == nil {
+		return
+	}
+
+	if url, ok := s.images.PublicURL(image.PublicId); ok {
+		attribution := image.Attribution
+		car.Photo = &domain.CarPhoto{Url: url, Source: domain.PhotoSourceCatalogue, Attribution: &attribution}
+	}
 }
 
 // touchesLink reports whether an update could leave a car disagreeing with its

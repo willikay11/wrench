@@ -136,5 +136,9 @@ plugins:
 
   - name: request-size-limiting
     config:
-      allowed_payload_size: 10
+      # 11, not 10: a photo may be a full 10MB (FR-35), and the multipart framing
+      # around it adds a few kilobytes more, which a 10MB cap would refuse here
+      # before the API ever saw it. The API still holds the file itself to
+      # exactly 10MB, and every JSON endpoint to 1MB.
+      allowed_payload_size: 11
       size_unit: megabytes

@@ -31,6 +31,10 @@ type CarSummary struct {
 	// silhouette from BodyStyle when the car has no photo.
 	GenerationId *string `json:"generationId"`
 	BodyStyle    *string `json:"bodyStyle"`
+
+	// Photo is the owner's upload, or the linked generation's credited catalogue
+	// image, or null — resolved by the server so no client re-implements it.
+	Photo *domain.CarPhoto `json:"photo"`
 }
 
 // CursorPagination tells a client whether to ask again and with what.
@@ -144,6 +148,7 @@ func carListResponse(page domain.CarPage) CarListResponse {
 			CreatedAt:    car.CreatedAt.UTC().Format(time.RFC3339Nano),
 			GenerationId: idString(car.GenerationId),
 			BodyStyle:    car.BodyStyle,
+			Photo:        car.Photo,
 		})
 	}
 

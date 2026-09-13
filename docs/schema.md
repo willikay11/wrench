@@ -305,15 +305,34 @@ is inherently confirmed). Application logic sets
 `confirmed = FALSE` explicitly when `source` is
 `ai_assistant` or `ai_vision`, per FR-33.
 
-### carModPhotos / carServicePhotos / photoUrls
+### carPhotos / carModPhotos / carServicePhotos / photoUrls
 
 ```sql
 CREATE TABLE photoUrls (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   url         VARCHAR NOT NULL,
+  publicId    VARCHAR(255) NOT NULL UNIQUE,
+  width       INTEGER CHECK (width > 0),
+  height      INTEGER CHECK (height > 0),
   createdAt   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updatedAt   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE carPhotos (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type        VARCHAR NOT NULL CHECK (type IN ('primary')),
+  carId       UUID NOT NULL REFERENCES cars(id)
+              ON DELETE CASCADE,
+  photoUrlId  UUID NOT NULL REFERENCES photoUrls(id)
+              ON DELETE CASCADE,
+  createdAt   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updatedAt   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX uq_carphotos_primary
+  ON carPhotos(carId) WHERE type = 'primary';
+
+CREATE INDEX idx_carphotos_carid ON carPhotos(carId);
 
 CREATE TABLE carModPhotos (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -351,6 +370,21 @@ directly on each join table. This normalises the
 URL itself in one place, simplifying any future bulk
 operations on stored URLs (e.g. a Cloudinary
 migration per ADR-007's migration trigger).
+
+**Why `photoUrls` carries `publicId`:** Users' photos are
+delivered through signed URLs built per request (ADR-007),
+and a signature is computed from the Cloudinary public id,
+not from a stored URL. `url` keeps the upload's original
+URL for reference; `publicId` is what delivery and deletion
+use.
+
+**One primary photo per car:** `uq_carphotos_primary` holds
+it in the database. Partial, so a later photo type — a
+gallery — is not limited to one per car.
+
+**Deleting a car** cascades to its `carPhotos` rows but not
+to `photoUrls` or the Cloudinary asset; that cleanup belongs
+to the car-deletion job (see `DELETE /cars/{carId}`).
 
 ### carService
 

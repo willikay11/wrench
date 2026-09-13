@@ -105,7 +105,7 @@ func aCar() domain.Car {
 // port rather than the concrete service — NewService returns an unexported
 // type, and the interface is what the handler actually depends on.
 func newService(repo *mockCarRepo) ports.CarService {
-	return car.NewService(repo, &fakeCatalogue{}, &mockTxManager{})
+	return car.NewService(repo, &fakeCatalogue{}, nil, nil, &mockTxManager{})
 }
 
 func TestCreateCarPassesTheCarToTheRepositoryUnchanged(t *testing.T) {

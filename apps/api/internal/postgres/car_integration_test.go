@@ -582,3 +582,115 @@ func TestGetForUpdateIsScopedToTheOwner(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, bobsCar.Id, own.Id)
 }
+
+func aStoredImage() domain.StoredImage {
+	publicId := "wrench/cars/test/photo/" + uuid.NewString()
+	return domain.StoredImage{
+		PublicId:  publicId,
+		SecureURL: "https://res.cloudinary.com/test/image/authenticated/v1/" + publicId,
+		Width:     1600,
+		Height:    900,
+	}
+}
+
+func TestSetPrimaryPhotoRecordsThenReplacesAndReturnsThePrevious(t *testing.T) {
+	pool := withDB(t)
+	alice, _ := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+	car := aSavedCar(t, repo, alice)
+
+	first, second := aStoredImage(), aStoredImage()
+
+	previous, err := repo.SetPrimaryPhoto(t.Context(), car.Id, first)
+	require.NoError(t, err)
+	require.Nil(t, previous, "a car's first photo replaces nothing")
+
+	previous, err = repo.SetPrimaryPhoto(t.Context(), car.Id, second)
+	require.NoError(t, err)
+	require.NotNil(t, previous)
+	require.Equal(t, first.PublicId, *previous, "the caller needs the replaced asset to delete it")
+
+	var photos, orphans int
+	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM carPhotos WHERE carId = $1`, car.Id).Scan(&photos))
+	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM photoUrls WHERE publicId = $1`, first.PublicId).Scan(&orphans))
+	require.Equal(t, 1, photos)
+	require.Zero(t, orphans, "the replaced photo's record is removed with it")
+
+	page, err := repo.List(t.Context(), mustQuery(t, alice, nil))
+	require.NoError(t, err)
+	require.Equal(t, second.PublicId, *page.Cars[0].PhotoPublicId)
+}
+
+func TestTheDatabaseAllowsOnePrimaryPhotoPerCar(t *testing.T) {
+	pool := withDB(t)
+	alice, _ := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+	car := aSavedCar(t, repo, alice)
+
+	_, err := repo.SetPrimaryPhoto(t.Context(), car.Id, aStoredImage())
+	require.NoError(t, err)
+
+	// Past the repository, straight at the table.
+	extra := aStoredImage()
+	_, err = pool.Exec(t.Context(), `
+		WITH url AS (INSERT INTO photoUrls (url, publicId) VALUES ($2, $3) RETURNING id)
+		INSERT INTO carPhotos (carId, photoUrlId, type) SELECT $1, id, 'primary' FROM url`,
+		car.Id, extra.SecureURL, extra.PublicId)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "uq_carphotos_primary")
+}
+
+func TestDeletingACarRemovesItsPhotoRecords(t *testing.T) {
+	pool := withDB(t)
+	alice, _ := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+	car := aSavedCar(t, repo, alice)
+
+	_, err := repo.SetPrimaryPhoto(t.Context(), car.Id, aStoredImage())
+	require.NoError(t, err)
+
+	_, err = pool.Exec(t.Context(), `DELETE FROM cars WHERE id = $1`, car.Id)
+	require.NoError(t, err)
+
+	var photos int
+	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM carPhotos WHERE carId = $1`, car.Id).Scan(&photos))
+	require.Zero(t, photos)
+}
+
+// The references the service resolves a photo from: the upload, and the linked
+// generation's catalogue image with its credit.
+func TestCarResponsesCarryTheImageReferences(t *testing.T) {
+	pool := withDB(t)
+	alice, _ := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+	tok := token()
+
+	makeName, modelName := "Image"+tok, "Model"+tok
+	modelId := aModel(t, pool, aMake(t, pool, makeName), modelName)
+	var generation uuid.UUID
+	require.NoError(t, pool.QueryRow(t.Context(), `
+		INSERT INTO vehicleGenerations
+		  (modelId, startYear, endYear, bodyStyle, imagePublicId, imageAttribution, imageLicense, imageSourceUrl)
+		VALUES ($1, 2002, 2009, 'coupe', 'wrench/catalogue/test', 'Photo by Someone', 'CC BY-SA 4.0', 'https://commons.example/test')
+		RETURNING id`, modelId).Scan(&generation))
+
+	car, err := repo.Save(t.Context(), domain.Car{
+		UserId: alice, Make: makeName, Model: modelName, Year: 2005,
+		Engine: "VQ35DE", UsageType: "track", GenerationId: &generation,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, car.CatalogueImage)
+	require.Equal(t, "Photo by Someone", car.CatalogueImage.Attribution)
+	require.Nil(t, car.PhotoPublicId)
+
+	upload := aStoredImage()
+	_, err = repo.SetPrimaryPhoto(t.Context(), car.Id, upload)
+	require.NoError(t, err)
+
+	updated, err := repo.Update(t.Context(), domain.UpdateCar{Id: car.Id, UserId: alice, Engine: ptr("V8")})
+	require.NoError(t, err)
+	require.Equal(t, upload.PublicId, *updated.PhotoPublicId)
+	require.Equal(t, "wrench/catalogue/test", updated.CatalogueImage.PublicId)
+	require.Equal(t, "CC BY-SA 4.0", updated.CatalogueImage.License)
+}

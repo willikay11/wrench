@@ -21,6 +21,7 @@ const (
 	typeValidationFailed = "/problems/validation-failed"
 	typeMalformedBody    = "/problems/malformed-body"
 	typeMalformedParam   = "/problems/malformed-param"
+	typeInvalidFile      = "/problems/invalid-file"
 )
 
 // Problem is an RFC 7807 problem details object.

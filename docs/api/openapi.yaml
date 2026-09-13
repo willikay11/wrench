@@ -477,9 +477,14 @@ components:
         usageType:
           type: string
           example: track
-        primaryPhotoUrl:
-          type: string
+        photo:
           nullable: true
+          description: |
+            The image the car is shown with, resolved by the server:
+            the owner's upload, then the linked generation's catalogue
+            image, then null (the client draws the body-style silhouette).
+          allOf:
+            - $ref: '#/components/schemas/CarPhoto'
         modCount:
           type: integer
           example: 12
@@ -519,6 +524,22 @@ components:
             updatedAt:
               type: string
               format: date-time
+
+    CarPhoto:
+      type: object
+      properties:
+        url:
+          type: string
+          description: |
+            For an upload, a signed authenticated URL regenerated on each
+            response. It does not expire on its own (ADR-007, amended).
+        source:
+          type: string
+          enum: [upload, catalogue]
+        attribution:
+          type: string
+          nullable: true
+          description: Required credit for a catalogue image; null for an upload.
 
     # ─────────────────────────────────────────
     # CATALOGUE
@@ -2213,6 +2234,68 @@ paths:
           description: Car deleted. No response body.
         '404':
           $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /cars/{carId}/photo:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Cars
+      summary: Set a car's photo
+      description: |
+        Stores the photo as the car's primary photo, replacing any
+        previous one, whose asset is then deleted.
+
+        A dedicated endpoint rather than `/upload/photo` + "include
+        the URL": the car in the path is checked for ownership before
+        anything is stored, and the server writes the reference
+        itself (ADR-007, amended).
+
+        **Accepted:** JPEG, PNG, WebP, HEIC — decided by the file's
+        magic bytes, never its name or declared type. SVG is refused.
+        **Max size:** 10MB.
+
+        **Requirements:** FR-17, FR-35, FR-37, NFR-04, NFR-25
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Photo stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CarPhoto'
+        '400':
+          description: Not a multipart body
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          description: No file, an empty file, over 10MB, or not an accepted image type
+        '502':
+          description: The photo could not be stored
+        '503':
+          description: Photo uploads are not configured
         '401':
           $ref: '#/components/responses/UnauthorizedError'
 

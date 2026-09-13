@@ -28,6 +28,15 @@ type Car struct {
 	// the row. A value a client sends is overwritten, like the timestamps.
 	BodyStyle *string `json:"bodyStyle"`
 
+	// Photo is the image the car is shown with, resolved by the service from
+	// the stored references below. A value a client sends is overwritten.
+	Photo *CarPhoto `json:"photo"`
+
+	// The stored references Photo is resolved from. Never sent to a client: the
+	// uploaded photo's public id, and the linked generation's catalogue image.
+	PhotoPublicId  *string         `json:"-"`
+	CatalogueImage *CatalogueImage `json:"-"`
+
 	// Set by the database, never by the caller: both are filled from the
 	// statement's RETURNING clause, so anything a client sends under these
 	// names is overwritten before the car leaves the repository.

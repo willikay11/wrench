@@ -1,7 +1,8 @@
 # ADR-007: Media Storage — Cloudinary vs S3 + CloudFront
 
 ## Status
-Accepted
+Accepted — amended 2026-09-13 (car photos and
+catalogue images; signed URL expiry corrected)
 
 ## Date
 2026-06-22
@@ -55,12 +56,15 @@ and transformation.
 ```
 wrench/
   cars/{carId}/
+    photo/
     mods/{modId}/
     service/{recordId}/
     inspiration/{conversationId}/
   users/{userId}/
     avatar/
   receipts/{carId}/{entryId}/
+  catalogue/
+    generations/{generationId}/
 ```
 
 ### Access control
@@ -79,12 +83,18 @@ inspiration     Authenticated (signed URL,
 avatars         Public (low sensitivity,
                  needs fast unauthenticated
                  display across the app)
+car photos      Authenticated (signed URL —
+                 see the amendment on expiry)
+catalogue       Public (licensed reference
+images           data, shown with its
+                 attribution — ADR-010)
 ```
 
 Signed URLs are generated server-side by the Go API
-on each request that returns a media URL, ensuring
-expired links cannot be used and access is tied
-to the authenticated user's ownership.
+on each request that returns a media URL, so access
+is tied to the authenticated user's ownership.
+*(Amended 2026-09-13: a signed URL does not by itself
+expire — see "Signed URLs do not expire" below.)*
 
 ### Image transformations
 Cloudinary URL-based transformations are used
@@ -109,6 +119,69 @@ https://res.cloudinary.com/wrench/image/upload/
 One file is stored. Every size and format variant
 is generated on-demand by Cloudinary and cached
 at their CDN edge after first request.
+
+### Amendment — 2026-09-13
+
+Added with car photos (FR-35, WRE-266) and the vehicle
+catalogue (ADR-010).
+
+#### Two new media categories
+- **Car photos** — one primary photo per car, the owner's
+  own image. Authenticated, like every other user photo.
+- **Catalogue images** — representative images of a
+  vehicle generation. Platform reference data rather than
+  user data, so public, and only ever stored with their
+  attribution and licence (ADR-010).
+
+#### Car photos use a dedicated endpoint
+Car photos are uploaded with `POST /cars/{carId}/photo`,
+not the generic `POST /upload/photo` followed by the
+client sending the URL back.
+
+The generic flow trusts the client to return a URL or
+public id, which lets a caller attach an asset they do
+not own. The dedicated endpoint checks that the car in
+the path is the caller's *before* anything is sent to
+Cloudinary, and the server writes the reference itself.
+The car is created first and its photo uploaded after,
+so the folder's `carId` is always a real car.
+
+The generic endpoint remains the pattern for mod, service
+and inspiration photos, where the record the photo belongs
+to may not exist yet.
+
+#### Signed URLs do not expire
+The access table above lists "signed URL, 24-hour expiry".
+That is two different Cloudinary features, and only the
+first is in use:
+
+- **Signed delivery URL** (`/s--signature--/`). The
+  signature covers the public id and the transformation,
+  so a URL cannot be edited to reach another asset or
+  another rendering of it. It does **not** expire: a
+  leaked URL keeps working until the asset is replaced or
+  deleted.
+- **Token-based authentication** adds a time limit
+  (`duration`, e.g. 24 hours). It is plan-dependent on
+  Cloudinary, and is not enabled.
+
+What is implemented is the signed URL, regenerated on
+every response. The 24-hour expiry in the table is the
+upgrade path, applied to every authenticated category at
+once when the plan supports token-based authentication —
+not a property the system has today.
+
+#### Gateway size limit
+Kong's `request-size-limiting` was 10MB for the whole
+request. A full 10MB photo plus its multipart framing
+exceeds that, so the gateway refused a photo the API
+would accept. It is raised to 11MB. The API enforces the
+10MB file limit exactly, and 1MB on every JSON endpoint.
+
+#### HEIC
+Accepted for photos (FR-35), and delivered through
+`f_auto`, so a browser without HEIC support receives a
+format it can display.
 
 ## Reasoning
 

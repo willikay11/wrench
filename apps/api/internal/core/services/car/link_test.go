@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/willikay11/wrench/api/internal/core/domain"
+	"github.com/willikay11/wrench/api/internal/core/ports"
 	"github.com/willikay11/wrench/api/internal/core/services/car"
 )
 
@@ -74,6 +75,12 @@ func (r *linkRepo) GetForUpdate(context.Context, uuid.UUID, uuid.UUID) (domain.C
 	return r.current, r.getErr
 }
 
+// newLinkService builds the service with no media storage: a car's link does
+// not depend on its photo.
+func newLinkService(repo ports.CarRepository, catalogue ports.CatalogueRepository, tx ports.TxManager) ports.CarService {
+	return car.NewService(repo, catalogue, nil, nil, tx)
+}
+
 type txRecorder struct{ transactions int }
 
 func (t *txRecorder) WithinTransaction(ctx context.Context, fn func(context.Context) error) error {
@@ -105,7 +112,7 @@ func TestCreateCarLinksWhenTheCarAgreesWithTheGeneration(t *testing.T) {
 	catalogue := &fakeCatalogue{matches: map[uuid.UUID]domain.GenerationMatch{z33: match}}
 	repo := &linkRepo{}
 
-	_, err := car.NewService(repo, catalogue, &txRecorder{}).CreateCar(t.Context(), domain.Car{
+	_, err := newLinkService(repo, catalogue, &txRecorder{}).CreateCar(t.Context(), domain.Car{
 		Make: "nissan", Model: "350Z", Year: 2005, GenerationId: &z33,
 	})
 
@@ -133,7 +140,7 @@ func TestCreateCarRefusesACarThatDisagreesWithItsGeneration(t *testing.T) {
 			repo := &linkRepo{}
 			tc.car.GenerationId = &z33
 
-			_, err := car.NewService(repo,
+			_, err := newLinkService(repo,
 				&fakeCatalogue{matches: map[uuid.UUID]domain.GenerationMatch{z33: match}},
 				&txRecorder{},
 			).CreateCar(t.Context(), tc.car)
@@ -147,7 +154,7 @@ func TestCreateCarRefusesACarThatDisagreesWithItsGeneration(t *testing.T) {
 func TestCreateCarRefusesAnUnknownGeneration(t *testing.T) {
 	repo := &linkRepo{}
 
-	_, err := car.NewService(repo, &fakeCatalogue{}, &txRecorder{}).CreateCar(t.Context(), domain.Car{
+	_, err := newLinkService(repo, &fakeCatalogue{}, &txRecorder{}).CreateCar(t.Context(), domain.Car{
 		Make: "Nissan", Model: "350Z", Year: 2005, GenerationId: ptr(uuid.New()),
 	})
 
@@ -160,7 +167,7 @@ func TestCreateCarWithoutALinkNeverAsksTheCatalogue(t *testing.T) {
 	catalogue := &fakeCatalogue{}
 	repo := &linkRepo{}
 
-	_, err := car.NewService(repo, catalogue, &txRecorder{}).CreateCar(t.Context(), domain.Car{
+	_, err := newLinkService(repo, catalogue, &txRecorder{}).CreateCar(t.Context(), domain.Car{
 		Make: "Kit", Model: "Car", Year: 2005,
 	})
 
@@ -174,7 +181,7 @@ func TestUpdateCarChecksANewLinkAgainstTheStoredCar(t *testing.T) {
 	catalogue := &fakeCatalogue{matches: map[uuid.UUID]domain.GenerationMatch{z33: match}}
 	repo := &linkRepo{current: domain.Car{Make: "Nissan", Model: "350Z", Year: 2005}}
 
-	_, err := car.NewService(repo, catalogue, &txRecorder{}).UpdateCar(t.Context(), domain.UpdateCar{
+	_, err := newLinkService(repo, catalogue, &txRecorder{}).UpdateCar(t.Context(), domain.UpdateCar{
 		GenerationId: domain.Nullable[uuid.UUID]{Sent: true, Value: &z33},
 	})
 
@@ -188,7 +195,7 @@ func TestUpdateCarRefusesAYearThatBreaksTheExistingLink(t *testing.T) {
 	z33, match := generation("Nissan", "350Z", 2002, endingIn(2009))
 	repo := &linkRepo{current: domain.Car{Make: "Nissan", Model: "350Z", Year: 2005, GenerationId: &z33}}
 
-	_, err := car.NewService(repo,
+	_, err := newLinkService(repo,
 		&fakeCatalogue{matches: map[uuid.UUID]domain.GenerationMatch{z33: match}},
 		&txRecorder{},
 	).UpdateCar(t.Context(), domain.UpdateCar{Year: ptr(2015)})
@@ -203,7 +210,7 @@ func TestUpdateCarAllowsABreakingChangeWhenTheSameRequestUnlinks(t *testing.T) {
 	catalogue := &fakeCatalogue{matches: map[uuid.UUID]domain.GenerationMatch{z33: match}}
 	repo := &linkRepo{current: domain.Car{Make: "Nissan", Model: "350Z", Year: 2005, GenerationId: &z33}}
 
-	_, err := car.NewService(repo, catalogue, &txRecorder{}).UpdateCar(t.Context(), domain.UpdateCar{
+	_, err := newLinkService(repo, catalogue, &txRecorder{}).UpdateCar(t.Context(), domain.UpdateCar{
 		Year:         ptr(2015),
 		GenerationId: domain.Nullable[uuid.UUID]{Sent: true, Value: nil},
 	})
@@ -220,7 +227,7 @@ func TestUpdateCarRelinksAgainstTheValuesItIsWriting(t *testing.T) {
 	catalogue := &fakeCatalogue{matches: map[uuid.UUID]domain.GenerationMatch{z33: z33Match, z34: z34Match}}
 	repo := &linkRepo{current: domain.Car{Make: "Nissan", Model: "350Z", Year: 2005, GenerationId: &z33}}
 
-	_, err := car.NewService(repo, catalogue, &txRecorder{}).UpdateCar(t.Context(), domain.UpdateCar{
+	_, err := newLinkService(repo, catalogue, &txRecorder{}).UpdateCar(t.Context(), domain.UpdateCar{
 		Model:        ptr("370Z"),
 		Year:         ptr(2012),
 		GenerationId: domain.Nullable[uuid.UUID]{Sent: true, Value: &z34},
@@ -237,7 +244,7 @@ func TestUpdateCarOnSomeoneElsesCarIsNotFoundBeforeTheCatalogueIsAsked(t *testin
 	catalogue := &fakeCatalogue{matches: map[uuid.UUID]domain.GenerationMatch{z33: match}}
 	repo := &linkRepo{getErr: domain.ErrCarNotFound}
 
-	_, err := car.NewService(repo, catalogue, &txRecorder{}).UpdateCar(t.Context(), domain.UpdateCar{
+	_, err := newLinkService(repo, catalogue, &txRecorder{}).UpdateCar(t.Context(), domain.UpdateCar{
 		GenerationId: domain.Nullable[uuid.UUID]{Sent: true, Value: &z33},
 	})
 
@@ -250,7 +257,7 @@ func TestUpdateCarThatCannotAffectALinkSkipsTheReadAndTheTransaction(t *testing.
 	repo := &linkRepo{}
 	tx := &txRecorder{}
 
-	_, err := car.NewService(repo, &fakeCatalogue{}, tx).UpdateCar(t.Context(), domain.UpdateCar{
+	_, err := newLinkService(repo, &fakeCatalogue{}, tx).UpdateCar(t.Context(), domain.UpdateCar{
 		Engine: ptr("V8"),
 		Notes:  domain.Nullable[string]{Sent: true, Value: ptr("stage 2")},
 	})
@@ -266,7 +273,7 @@ func TestUpdateCarReadsChecksAndWritesInOneTransaction(t *testing.T) {
 	repo := &linkRepo{current: domain.Car{Make: "Nissan", Model: "350Z", Year: 2005, GenerationId: &z33}}
 	tx := &txRecorder{}
 
-	_, err := car.NewService(repo,
+	_, err := newLinkService(repo,
 		&fakeCatalogue{matches: map[uuid.UUID]domain.GenerationMatch{z33: match}},
 		tx,
 	).UpdateCar(t.Context(), domain.UpdateCar{Year: ptr(2006)})
