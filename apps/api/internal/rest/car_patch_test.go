@@ -177,7 +177,11 @@ func TestUpdateCarValidatesTheFieldsItWasGiven(t *testing.T) {
 		field  string
 		reason string
 	}{
-		{name: "make too short", body: map[string]any{"make": "BM"}, field: "make", reason: "This field must be at least 3 characters"},
+		// A pointer field that is present but blank: omitempty alone would let it
+		// through, so notblank is what stops a PATCH blanking a make.
+		{name: "a make that is only whitespace", body: map[string]any{"make": "   "}, field: "make", reason: "This field cannot be blank"},
+		{name: "an empty model", body: map[string]any{"model": ""}, field: "model", reason: "This field cannot be blank"},
+		{name: "an engine that is only whitespace", body: map[string]any{"engine": "\t"}, field: "engine", reason: "This field cannot be blank"},
 		{name: "make too long", body: map[string]any{"make": strings.Repeat("x", 51)}, field: "make", reason: "This field must be at most 50 characters"},
 		{name: "engine too long", body: map[string]any{"engine": strings.Repeat("x", 101)}, field: "engine", reason: "This field must be at most 100 characters"},
 		{name: "notes too long", body: map[string]any{"notes": strings.Repeat("x", 1001)}, field: "notes", reason: "This field must be at most 1000 characters"},
@@ -212,8 +216,8 @@ func TestUpdateCarAcceptsTheYearRangeBoundaries(t *testing.T) {
 	}
 }
 
-// Clearing notes is not a length violation: null unwraps to no value, which
-// omitempty skips rather than measuring against min=3.
+// Clearing notes is not a validation failure: null unwraps to no value, which
+// omitempty skips.
 func TestUpdateCarDoesNotValidateAClearedNotes(t *testing.T) {
 	service := &fakeCarService{}
 
@@ -292,4 +296,30 @@ func decodePatchProblem(t *testing.T, recorder *httptest.ResponseRecorder) rest.
 	require.Equal(t, recorder.Code, problem.Status)
 
 	return problem
+}
+
+// The same short names POST accepts. A PATCH that renames a car to "MG Z" must
+// not be refused by a rule the spec never had.
+func TestUpdateCarAcceptsTheShortNamesRealCarsHave(t *testing.T) {
+	service := &fakeCarService{}
+
+	recorder := patchJSON(t, rest.NewCarHandler(service), uuid.New(), uuid.New().String(),
+		map[string]any{"make": " MG ", "model": "Z", "engine": "V8"})
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	require.Equal(t, "MG", *service.receivedUpdatedCar.Make, "trimmed before it reaches the service")
+	require.Equal(t, "Z", *service.receivedUpdatedCar.Model)
+	require.Equal(t, "V8", *service.receivedUpdatedCar.Engine)
+}
+
+// Notes emptied to whitespace in an edit form mean "clear them" — the same
+// instruction as null, not a blank string stored as a note.
+func TestUpdateCarTreatsWhitespaceNotesAsClearing(t *testing.T) {
+	service := &fakeCarService{}
+
+	recorder := patch(t, rest.NewCarHandler(service), uuid.New(), uuid.New().String(), `{"notes":"   "}`)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.True(t, service.receivedUpdatedCar.Notes.Sent)
+	require.Nil(t, service.receivedUpdatedCar.Notes.Value)
 }

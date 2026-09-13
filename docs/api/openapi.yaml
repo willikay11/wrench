@@ -381,10 +381,12 @@ components:
       properties:
         make:
           type: string
+          minLength: 1
           maxLength: 50
           example: Nissan
         model:
           type: string
+          minLength: 1
           maxLength: 50
           example: 350Z
         year:
@@ -394,6 +396,7 @@ components:
           example: 2003
         engine:
           type: string
+          minLength: 1
           maxLength: 100
           example: VQ35DE 3.5L V6
         usageType:
@@ -412,9 +415,11 @@ components:
       properties:
         make:
           type: string
+          minLength: 1
           maxLength: 50
         model:
           type: string
+          minLength: 1
           maxLength: 50
         year:
           type: integer
@@ -422,6 +427,7 @@ components:
           maximum: 2030
         engine:
           type: string
+          minLength: 1
           maxLength: 100
         usageType:
           type: string
