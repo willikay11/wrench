@@ -408,6 +408,15 @@ components:
           maxLength: 1000
           nullable: true
           example: Track build, not road registered
+        generationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Optional link to a catalogue generation (ADR-010). When set,
+            make, model and year must agree with it — each field that does
+            not is reported in a 422, and a generation that does not exist
+            is reported on generationId.
 
     UpdateCarRequest:
       type: object
@@ -436,6 +445,15 @@ components:
           type: string
           maxLength: 1000
           nullable: true
+        generationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Absent leaves the link as it is; null unlinks the car; a value
+            links it. While linked, the car as it will be after this update
+            must agree with the generation — a change that breaks that is a
+            422 unless the same request unlinks or relinks.
 
     CarSummary:
       type: object
@@ -468,6 +486,17 @@ components:
         createdAt:
           type: string
           format: date-time
+        generationId:
+          type: string
+          format: uuid
+          nullable: true
+        bodyStyle:
+          type: string
+          nullable: true
+          enum: [coupe, sedan, hatchback, wagon, convertible, suv, pickup, van]
+          description: |
+            From the linked generation; null for a car with no link.
+            Read-only — a value sent on create is ignored.
 
     CarDetail:
       allOf:

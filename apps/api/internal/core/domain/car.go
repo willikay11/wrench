@@ -19,6 +19,15 @@ type Car struct {
 	UsageType string    `json:"usageType" validate:"required,oneof=daily track show weekend off-road project"`
 	Notes     string    `json:"notes" validate:"omitempty,max=1000"`
 
+	// GenerationId links the car to a catalogue generation (ADR-010). Optional:
+	// a car the catalogue does not know is still a car. When set, the car's
+	// make, model and year must agree with the generation.
+	GenerationId *uuid.UUID `json:"generationId"`
+
+	// BodyStyle is the linked generation's, read back from the database with
+	// the row. A value a client sends is overwritten, like the timestamps.
+	BodyStyle *string `json:"bodyStyle"`
+
 	// Set by the database, never by the caller: both are filled from the
 	// statement's RETURNING clause, so anything a client sends under these
 	// names is overwritten before the car leaves the repository.
@@ -94,6 +103,12 @@ type UpdateCar struct {
 	UsageType *string `json:"usageType" validate:"omitempty,oneof=daily track show weekend off-road project"`
 
 	Notes Nullable[string] `json:"notes" validate:"omitempty,max=1000"`
+
+	// GenerationId is tri-state like notes: absent leaves the link as it is,
+	// null unlinks the car, and a value links it. Not validated here — whether
+	// the generation exists and agrees with the car is a catalogue question, and
+	// the service answers it.
+	GenerationId Nullable[uuid.UUID] `json:"generationId" validate:"-"`
 }
 
 // Normalize trims the fields the body carried, and must run before validation.
@@ -125,7 +140,7 @@ func (u *UpdateCar) Normalize() {
 // it intended has happened, and a 200 would say otherwise.
 func (u UpdateCar) HasChanges() bool {
 	return u.Make != nil || u.Model != nil || u.Year != nil ||
-		u.Engine != nil || u.UsageType != nil || u.Notes.Sent
+		u.Engine != nil || u.UsageType != nil || u.Notes.Sent || u.GenerationId.Sent
 }
 
 // The database enforces these same rules as a backstop, so a Save can fail

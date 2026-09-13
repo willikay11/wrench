@@ -284,6 +284,13 @@ func (h *CarHandler) CreateCar(w http.ResponseWriter, r *http.Request) {
 	car, err := h.carService.CreateCar(r.Context(), request)
 
 	if err != nil {
+		// A link the catalogue refuses is the caller's input, not a rule the
+		// database caught late, so it is answered without the warning below.
+		if problem, ok := generationProblem(err); ok {
+			writeProblem(w, r, problem)
+			return
+		}
+
 		if problem, known := carWriteProblem(err); known {
 			// The validate tags above should have caught every one of these, so
 			// reaching here means a rule is enforced in only one of the two
@@ -373,6 +380,13 @@ func (h *CarHandler) UpdateCar(w http.ResponseWriter, r *http.Request) {
 	car, err := h.carService.UpdateCar(r.Context(), request)
 
 	if err != nil {
+		// A link the catalogue refuses is the caller's input, not a rule the
+		// database caught late, so it is answered without the warning below.
+		if problem, ok := generationProblem(err); ok {
+			writeProblem(w, r, problem)
+			return
+		}
+
 		if problem, known := carWriteProblem(err); known {
 			// The validate tags above should have caught every one of these, so
 			// reaching here means a rule is enforced in only one of the two
@@ -389,4 +403,53 @@ func (h *CarHandler) UpdateCar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, car)
+}
+
+// generationProblem answers a catalogue link the service refused: a car that
+// disagrees with its generation, reported on each field that disagrees, or a
+// generation that does not exist, reported on generationId.
+func generationProblem(err error) (Problem, bool) {
+	var mismatch *domain.GenerationMismatchError
+
+	switch {
+	case errors.As(err, &mismatch):
+		params := make([]InvalidParam, 0, len(mismatch.Fields))
+		for _, field := range mismatch.Fields {
+			params = append(params, InvalidParam{Name: field, Reason: mismatchReason(field, mismatch)})
+		}
+
+		return Problem{
+			Type:          typeValidationFailed,
+			Title:         "The car details did not validate",
+			Status:        http.StatusUnprocessableEntity,
+			InvalidParams: params,
+		}, true
+
+	case errors.Is(err, domain.ErrUnknownGeneration):
+		return Problem{
+			Type:          typeValidationFailed,
+			Title:         "The car details did not validate",
+			Status:        http.StatusUnprocessableEntity,
+			InvalidParams: []InvalidParam{{Name: "generationId", Reason: "This generation does not exist in the catalogue"}},
+		}, true
+	}
+
+	return Problem{}, false
+}
+
+// mismatchReason says what the linked generation expects of a field. The year
+// names the range, so the reply says which years would do and not only that
+// this one does not.
+func mismatchReason(field string, mismatch *domain.GenerationMismatchError) string {
+	switch field {
+	case "make":
+		return "This make does not match the linked catalogue generation"
+	case "model":
+		return "This model does not match the linked catalogue generation"
+	default:
+		if mismatch.EndYear == nil {
+			return fmt.Sprintf("This year must be %d or later for the linked generation", mismatch.StartYear)
+		}
+		return fmt.Sprintf("This year must be between %d and %d for the linked generation", mismatch.StartYear, *mismatch.EndYear)
+	}
 }

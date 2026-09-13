@@ -427,3 +427,158 @@ func mustQuery(t *testing.T, owner uuid.UUID, cursor *domain.CarCursor, limit ..
 
 	return query
 }
+
+// aLinkableGeneration is a real catalogue entry — Make<tok> / Model<tok>,
+// 2002–2009, coupe — removed with its make when the test ends.
+func aLinkableGeneration(t *testing.T, pool *pgxpool.Pool) (id uuid.UUID, makeName, modelName string) {
+	t.Helper()
+
+	tok := token()
+	makeName, modelName = "Make"+tok, "Model"+tok
+	end := 2009
+	id = aGeneration(t, pool, aModel(t, pool, aMake(t, pool, makeName), modelName), 2002, &end)
+
+	return id, makeName, modelName
+}
+
+func TestSaveLinksAGenerationAndReturnsItsBodyStyle(t *testing.T) {
+	pool := withDB(t)
+	alice, _ := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+	generation, makeName, modelName := aLinkableGeneration(t, pool)
+
+	car, err := repo.Save(t.Context(), domain.Car{
+		UserId: alice, Make: makeName, Model: modelName, Year: 2005,
+		Engine: "VQ35DE", UsageType: "track", GenerationId: &generation,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, car.GenerationId)
+	require.Equal(t, generation, *car.GenerationId)
+	require.NotNil(t, car.BodyStyle)
+	require.Equal(t, "coupe", *car.BodyStyle)
+}
+
+// The body style is the database's answer, never the caller's.
+func TestSaveOverwritesABodyStyleTheCallerSent(t *testing.T) {
+	pool := withDB(t)
+	alice, _ := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+
+	car, err := repo.Save(t.Context(), domain.Car{
+		UserId: alice, Make: "Kit", Model: "Car", Year: 2005,
+		Engine: "V8", UsageType: "project", BodyStyle: ptr("suv"),
+	})
+
+	require.NoError(t, err)
+	require.Nil(t, car.GenerationId)
+	require.Nil(t, car.BodyStyle, "an unlinked car has no body style, whatever was sent")
+}
+
+// A generation deleted between the service's check and the insert is caught by
+// the foreign key and reported as the same error the check would have given.
+func TestSaveLinkingAMissingGenerationIsUnknownGeneration(t *testing.T) {
+	pool := withDB(t)
+	alice, _ := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+
+	_, err := repo.Save(t.Context(), domain.Car{
+		UserId: alice, Make: "Nissan", Model: "350Z", Year: 2005,
+		Engine: "VQ35DE", UsageType: "track", GenerationId: ptr(uuid.New()),
+	})
+
+	require.ErrorIs(t, err, domain.ErrUnknownGeneration)
+}
+
+func TestListReturnsEachCarsLinkAndBodyStyle(t *testing.T) {
+	pool := withDB(t)
+	alice, _ := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+	generation, makeName, modelName := aLinkableGeneration(t, pool)
+
+	linked, err := repo.Save(t.Context(), domain.Car{
+		UserId: alice, Make: makeName, Model: modelName, Year: 2005,
+		Engine: "VQ35DE", UsageType: "track", GenerationId: &generation,
+	})
+	require.NoError(t, err)
+	unlinked := aSavedCar(t, repo, alice)
+
+	page, err := repo.List(t.Context(), mustQuery(t, alice, nil))
+	require.NoError(t, err)
+
+	byId := map[uuid.UUID]domain.Car{}
+	for _, car := range page.Cars {
+		byId[car.Id] = car
+	}
+
+	require.Equal(t, generation, *byId[linked.Id].GenerationId)
+	require.Equal(t, "coupe", *byId[linked.Id].BodyStyle)
+	require.Nil(t, byId[unlinked.Id].GenerationId)
+	require.Nil(t, byId[unlinked.Id].BodyStyle)
+}
+
+func TestUpdateSetsKeepsAndClearsTheLink(t *testing.T) {
+	pool := withDB(t)
+	alice, _ := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+	generation, _, _ := aLinkableGeneration(t, pool)
+	car := aSavedCar(t, repo, alice)
+
+	linked, err := repo.Update(t.Context(), domain.UpdateCar{
+		Id: car.Id, UserId: alice,
+		GenerationId: domain.Nullable[uuid.UUID]{Sent: true, Value: &generation},
+	})
+	require.NoError(t, err)
+	require.Equal(t, generation, *linked.GenerationId)
+	require.Equal(t, "coupe", *linked.BodyStyle)
+
+	// A body that does not mention the link leaves it alone.
+	kept, err := repo.Update(t.Context(), domain.UpdateCar{Id: car.Id, UserId: alice, Engine: ptr("V8")})
+	require.NoError(t, err)
+	require.Equal(t, generation, *kept.GenerationId)
+
+	cleared, err := repo.Update(t.Context(), domain.UpdateCar{
+		Id: car.Id, UserId: alice,
+		GenerationId: domain.Nullable[uuid.UUID]{Sent: true, Value: nil},
+	})
+	require.NoError(t, err)
+	require.Nil(t, cleared.GenerationId)
+	require.Nil(t, cleared.BodyStyle)
+}
+
+// Removing catalogue data must never remove anyone's car.
+func TestDeletingAGenerationUnlinksCarsAndKeepsThem(t *testing.T) {
+	pool := withDB(t)
+	alice, _ := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+	generation, makeName, modelName := aLinkableGeneration(t, pool)
+
+	car, err := repo.Save(t.Context(), domain.Car{
+		UserId: alice, Make: makeName, Model: modelName, Year: 2005,
+		Engine: "VQ35DE", UsageType: "track", GenerationId: &generation,
+	})
+	require.NoError(t, err)
+
+	_, err = pool.Exec(t.Context(), `DELETE FROM vehicleGenerations WHERE id = $1`, generation)
+	require.NoError(t, err)
+
+	after, err := repo.GetForUpdate(t.Context(), car.Id, alice)
+	require.NoError(t, err, "the car must survive its generation")
+	require.Nil(t, after.GenerationId)
+	require.Equal(t, makeName, after.Make, "what the owner entered is untouched")
+	require.Equal(t, 2005, after.Year)
+}
+
+func TestGetForUpdateIsScopedToTheOwner(t *testing.T) {
+	pool := withDB(t)
+	alice, bob := twoUsers(t, pool)
+	repo := NewCarRepository(pool)
+	bobsCar := aSavedCar(t, repo, bob)
+
+	_, err := repo.GetForUpdate(t.Context(), bobsCar.Id, alice)
+	require.ErrorIs(t, err, domain.ErrCarNotFound)
+
+	own, err := repo.GetForUpdate(t.Context(), bobsCar.Id, bob)
+	require.NoError(t, err)
+	require.Equal(t, bobsCar.Id, own.Id)
+}

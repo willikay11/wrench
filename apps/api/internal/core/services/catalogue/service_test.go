@@ -25,6 +25,10 @@ func (f *fakeRepo) SearchModels(context.Context, uuid.UUID, domain.CatalogueSear
 	return nil, f.err
 }
 
+func (f *fakeRepo) FindGeneration(context.Context, uuid.UUID) (domain.GenerationMatch, error) {
+	return domain.GenerationMatch{}, f.err
+}
+
 func (f *fakeRepo) ListGenerations(context.Context, uuid.UUID, *int) ([]domain.VehicleGeneration, error) {
 	return f.generations, f.err
 }

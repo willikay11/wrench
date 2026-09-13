@@ -104,7 +104,7 @@ func main() {
 	waitlistSvc := waitlistsvc.NewService(waitlistRepo, waitlistRedis, emailOutbox, transactionManager)
 	emailDispatchSvc := emaildispatchsvc.NewService(emailOutbox, emailSender, cfg.EmailBatchSize, cfg.EmailStaleAfter)
 	authSvc := authsvc.NewService(&oauth2Config, verifier, authRepo, transactionManager, cfg.JWTSecret)
-	carSvc := carsvc.NewService(carRepo, transactionManager)
+	carSvc := carsvc.NewService(carRepo, catalogueRepo, transactionManager)
 
 	// Catalogue images are public and need only the cloud name. A malformed
 	// CLOUDINARY_URL leaves them out rather than stopping the API, since nothing

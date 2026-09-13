@@ -222,11 +222,14 @@ CREATE TABLE cars (
                 ('daily', 'track', 'show',
                  'project', 'off-road', 'weekend')),
   notes       TEXT,
+  generationId UUID REFERENCES vehicleGenerations(id)
+              ON DELETE SET NULL,
   createdAt   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updatedAt   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_cars_userid ON cars(userId);
+CREATE INDEX idx_cars_generationid ON cars(generationId);
 ```
 
 **Index rationale:** `userId` supports the single
@@ -244,6 +247,19 @@ engine for nearly every diagnostic or maintenance
 question. A car without an engine value produces
 materially worse AI responses, so this is enforced
 as NOT NULL at creation.
+
+**Why `generationId` is nullable:** A car may link to a
+catalogue generation ([ADR-010](./adr/010-vehicle-catalogue-and-car-imagery.md)),
+but a car the catalogue does not know is still a car.
+While linked, the car's make, model and year must agree
+with the generation — enforced by the application, which
+has the catalogue names to compare against.
+
+**Why `ON DELETE SET NULL`:** Removing a catalogue entry
+loses the link and never the car. The make, model and year
+the owner entered are untouched.
+`idx_cars_generationid` serves the foreign key, so that
+delete does not scan every car.
 
 ### carMods
 

@@ -22,6 +22,9 @@ type CatalogueRepository interface {
 	SearchMakes(ctx context.Context, search domain.CatalogueSearch) ([]domain.VehicleMake, error)
 	SearchModels(ctx context.Context, makeId uuid.UUID, search domain.CatalogueSearch) ([]domain.VehicleModel, error)
 	ListGenerations(ctx context.Context, modelId uuid.UUID, year *int) ([]domain.VehicleGeneration, error)
+	// FindGeneration returns a generation with its make and model names, or
+	// ErrUnknownGeneration.
+	FindGeneration(ctx context.Context, id uuid.UUID) (domain.GenerationMatch, error)
 }
 
 // ImageLocator turns a stored image reference into a URL a browser can load.

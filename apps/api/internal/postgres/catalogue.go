@@ -2,11 +2,13 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/willikay11/wrench/api/internal/core/domain"
@@ -192,4 +194,31 @@ func valueOf(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+const findGenerationQuery = `
+	SELECT g.id, g.modelId, g.code, g.startYear, g.endYear, g.bodyStyle, mo.name, ma.name
+	FROM vehicleGenerations g
+	JOIN vehicleModels mo ON mo.id = g.modelId
+	JOIN vehicleMakes ma  ON ma.id = mo.makeId
+	WHERE g.id = $1`
+
+func (r *catalogueRepo) FindGeneration(ctx context.Context, id uuid.UUID) (domain.GenerationMatch, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var match domain.GenerationMatch
+	err := from(ctx, r.db).QueryRow(ctx, findGenerationQuery, id).Scan(
+		&match.Generation.Id, &match.Generation.ModelId, &match.Generation.Code,
+		&match.Generation.StartYear, &match.Generation.EndYear, &match.Generation.BodyStyle,
+		&match.ModelName, &match.MakeName,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.GenerationMatch{}, domain.ErrUnknownGeneration
+	}
+	if err != nil {
+		return domain.GenerationMatch{}, fmt.Errorf("find generation: %w", err)
+	}
+
+	return match, nil
 }

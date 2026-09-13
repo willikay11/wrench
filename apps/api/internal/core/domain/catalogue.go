@@ -24,9 +24,10 @@ const (
 )
 
 var (
-	ErrMakeNotFound  = errors.New("vehicle make not found")
-	ErrModelNotFound = errors.New("vehicle model not found")
-	ErrSearchTooLong = errors.New("search text too long")
+	ErrMakeNotFound      = errors.New("vehicle make not found")
+	ErrModelNotFound     = errors.New("vehicle model not found")
+	ErrSearchTooLong     = errors.New("search text too long")
+	ErrUnknownGeneration = errors.New("catalogue generation not found")
 )
 
 // BodyStyles a generation can have. The same list is a CHECK constraint on
@@ -105,4 +106,47 @@ func NewCatalogueSearch(text string, limit *int) (CatalogueSearch, error) {
 	}
 
 	return CatalogueSearch{Text: text, Limit: size}, nil
+}
+
+// GenerationMatch is a generation with the names of the make and model it
+// belongs to: everything a car has to agree with to link to it.
+type GenerationMatch struct {
+	Generation VehicleGeneration
+	MakeName   string
+	ModelName  string
+}
+
+// Disagreements lists the fields in which a car differs from the generation it
+// would link to, in the order a form shows them.
+//
+// Names compare without regard to case or surrounding space — "nissan" is
+// Nissan — but otherwise exactly. A link that tolerated a different model would
+// be a link to the wrong image.
+func (m GenerationMatch) Disagreements(carMake, carModel string, year int) []string {
+	var fields []string
+
+	if !strings.EqualFold(strings.TrimSpace(carMake), m.MakeName) {
+		fields = append(fields, "make")
+	}
+	if !strings.EqualFold(strings.TrimSpace(carModel), m.ModelName) {
+		fields = append(fields, "model")
+	}
+	if !m.Generation.Covers(year) {
+		fields = append(fields, "year")
+	}
+
+	return fields
+}
+
+// GenerationMismatchError is a car that disagrees with the generation it would
+// link to. It carries the generation's years so the caller can say which years
+// would do, rather than only that this one does not.
+type GenerationMismatchError struct {
+	Fields    []string
+	StartYear int
+	EndYear   *int
+}
+
+func (e *GenerationMismatchError) Error() string {
+	return "car does not match its catalogue generation: " + strings.Join(e.Fields, ", ")
 }

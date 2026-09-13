@@ -314,3 +314,31 @@ func TestStarterSeedResolvesAKnownCar(t *testing.T) {
 	require.Equal(t, "coupe", generations[0].BodyStyle)
 	require.Nil(t, generations[0].Image, "the seed carries no images")
 }
+
+func TestFindGenerationCarriesItsMakeAndModelNames(t *testing.T) {
+	pool := withDB(t)
+	repo := NewCatalogueRepository(pool)
+	tok := token()
+
+	makeName, modelName := "Find"+tok, "Model"+tok
+	end := 2009
+	id := aGeneration(t, pool, aModel(t, pool, aMake(t, pool, makeName), modelName), 2002, &end)
+
+	match, err := repo.FindGeneration(t.Context(), id)
+
+	require.NoError(t, err)
+	require.Equal(t, makeName, match.MakeName)
+	require.Equal(t, modelName, match.ModelName)
+	require.Equal(t, id, match.Generation.Id)
+	require.Equal(t, 2002, match.Generation.StartYear)
+	require.Equal(t, 2009, *match.Generation.EndYear)
+	require.Equal(t, "coupe", match.Generation.BodyStyle)
+}
+
+func TestFindGenerationOfAnUnknownIdIsUnknownGeneration(t *testing.T) {
+	pool := withDB(t)
+	repo := NewCatalogueRepository(pool)
+
+	_, err := repo.FindGeneration(t.Context(), uuid.New())
+	require.ErrorIs(t, err, domain.ErrUnknownGeneration)
+}
