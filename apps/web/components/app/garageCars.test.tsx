@@ -8,10 +8,11 @@ import { GarageCars } from '@/components/app/garageCars'
 
 const listCars = vi.fn()
 const createCar = vi.fn()
+const uploadCarPhoto = vi.fn()
 vi.mock('@/app/actions/cars', () => ({
   listCars: (...args: unknown[]) => listCars(...args),
   createCar: (...args: unknown[]) => createCar(...args),
-  uploadCarPhoto: vi.fn(),
+  uploadCarPhoto: (...args: unknown[]) => uploadCarPhoto(...args),
 }))
 // The sheet searches the catalogue as fields are typed into; these tests are
 // about the row, so every search simply finds nothing.
@@ -201,5 +202,30 @@ describe('GarageCars', () => {
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
     expect(screen.queryByText(/\bmods?\b/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/service due|up to date|stage \d/i)).not.toBeInTheDocument()
+  })
+
+  it('shows a photo added from a card in place of its placeholder', async () => {
+    const user = userEvent.setup()
+    listCars.mockResolvedValue(page([car('1')]))
+    uploadCarPhoto.mockResolvedValue({
+      status: 'success',
+      photo: {
+        url: 'https://res.cloudinary.com/demo/image/authenticated/s--x--/car.jpg',
+        source: 'upload',
+        attribution: null,
+      },
+    })
+
+    renderGarage()
+
+    await user.upload(
+      await screen.findByLabelText('Add photo of the 2003 Nissan 350Z'),
+      new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'car.png', { type: 'image/png' })
+    )
+
+    expect(await screen.findByRole('img', { name: '2003 Nissan 350Z' })).toBeInTheDocument()
+    expect(screen.queryByText('No photo yet')).not.toBeInTheDocument()
+    // Put in place from the upload's answer, not by reading the list again.
+    expect(listCars).toHaveBeenCalledTimes(1)
   })
 })

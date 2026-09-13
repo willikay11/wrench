@@ -319,7 +319,7 @@ func (r *carRepo) GetForUpdate(ctx context.Context, id, userId uuid.UUID) (domai
 	return car, nil
 }
 
-// imageRefs are the columns a car's photo and silhouette are resolved from: the
+// imageRefs are the columns a car's photo and body style are resolved from: the
 // linked generation's body style and catalogue image, and the uploaded primary
 // photo. They reach the service as stored references; turning them into URLs
 // is the service's job, not the repository's.

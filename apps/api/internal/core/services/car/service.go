@@ -197,7 +197,7 @@ func (s *service) SetCarPhoto(ctx context.Context, carId, userId uuid.UUID, imag
 
 // resolvePhoto sets the image a car is shown with, in one order: the owner's
 // upload, then the linked generation's catalogue image, then none — which the
-// client shows as the body-style silhouette (ADR-010).
+// client shows as its branded placeholder (ADR-010).
 //
 // It always overwrites Photo, so a value that arrived in a request body never
 // survives to the response. A catalogue image without its attribution and

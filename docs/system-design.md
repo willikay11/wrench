@@ -394,7 +394,7 @@ not generated and accepted without scrutiny.
 | [007](./adr/007-cloudinary-vs-s3-cloudfront.md) | Cloudinary vs S3 + CloudFront | Cloudinary — single SDK for upload, storage, CDN, and on-the-fly image transformation, eliminating the need for a separate transformation pipeline. |
 | [008](./adr/008-kong-api-gateway.md) | Kong API Gateway | Kong (2-node active/active) — perimeter concerns (SSL, CORS, channel auth, coarse rate limiting) centralised and rejected before reaching the Go API. |
 | [009](./adr/009-monolith-vs-microservices.md) | Monolith vs microservices | Well-structured monolith with compiler-enforced internal package boundaries — no validated service boundaries exist yet; structure preserves the option to extract services (most likely candidate: the AI/RAG package) without requiring a rewrite. |
-| [010](./adr/010-vehicle-catalogue-and-car-imagery.md) | Vehicle catalogue vs runtime image search | A curated catalogue keyed on generation, searched with free-text fallback. Car imagery resolves upload → licensed, attributed catalogue image → body-style silhouette. Runtime web or AI image search rejected for licensing, reliability and cost. |
+| [010](./adr/010-vehicle-catalogue-and-car-imagery.md) | Vehicle catalogue vs runtime image search | A curated catalogue keyed on generation, searched with free-text fallback. Car imagery resolves upload → licensed, attributed catalogue image → a branded placeholder that pictures no car. Runtime web or AI image search rejected for licensing, reliability and cost. |
 
 ---
 

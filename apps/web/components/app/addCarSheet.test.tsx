@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react'
-import { screen, waitFor, within } from '@testing-library/dom'
+import { screen, waitFor } from '@testing-library/dom'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -194,7 +194,7 @@ describe('AddCarSheet with the catalogue', () => {
 
     openSheet()
     await fillCatalogueCar(user)
-    await screen.findByText(/Representative outline/i)
+    await screen.findByText(/Catalogue match/i)
     await user.click(screen.getByRole('button', { name: /^Add car$/i }))
 
     await waitFor(() => expect(createCar).toHaveBeenCalledTimes(1))
@@ -202,17 +202,17 @@ describe('AddCarSheet with the catalogue', () => {
     expect(findGenerations).toHaveBeenLastCalledWith('access-token', Z350.id, 2005)
   })
 
-  // The outline stands in without pretending to be the car.
-  it('shows the body-style outline for a generation with no image', async () => {
+  // With no catalogue image there is no honest picture to show, so the match is
+  // confirmed in words and no car is pictured at all.
+  it('confirms a match for a generation with no image, without picturing a car', async () => {
     const user = userEvent.setup()
 
     openSheet()
     await fillCatalogueCar(user)
 
-    const caption = await screen.findByText(/Representative outline · Z33 · coupe · 2002–2009/i)
-    const figure = caption.closest('figure') as HTMLElement
-    expect(figure.querySelector('svg[data-body-style="coupe"]')).toBeInTheDocument()
-    expect(within(figure).queryByRole('img')).not.toBeInTheDocument()
+    expect(await screen.findByText('Catalogue match · Z33 · coupe · 2002–2009')).toBeInTheDocument()
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(document.querySelector('svg[data-body-style]')).not.toBeInTheDocument()
   })
 
   // Never an image without its credit (ADR-010).
@@ -252,7 +252,7 @@ describe('AddCarSheet with the catalogue', () => {
 
     openSheet()
     await fillCatalogueCar(user)
-    await screen.findByText(/Representative outline/i)
+    await screen.findByText(/Catalogue match/i)
     await user.click(screen.getByRole('button', { name: /^Add car$/i }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(

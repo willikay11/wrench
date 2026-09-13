@@ -225,7 +225,7 @@ func TestCarPhotoResolvesUploadThenCatalogueThenNothing(t *testing.T) {
 			wantCredit: ptr("Photo by Someone"),
 		},
 		{
-			name: "no photo at all, which the client draws as a silhouette",
+			name: "no photo at all, which the client shows as its placeholder",
 			car:  domain.Car{},
 		},
 		{

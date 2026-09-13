@@ -31,7 +31,7 @@ var (
 )
 
 // BodyStyles a generation can have. The same list is a CHECK constraint on
-// vehicleGenerations, and the garage draws one silhouette per style.
+// vehicleGenerations; the add-car sheet names it when confirming a match.
 var BodyStyles = []string{"coupe", "sedan", "hatchback", "wagon", "convertible", "suv", "pickup", "van"}
 
 type VehicleMake struct {

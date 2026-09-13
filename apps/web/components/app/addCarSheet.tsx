@@ -8,7 +8,6 @@ import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CarSilhouette } from '@/components/app/carSilhouette'
 import { CatalogueField } from '@/components/app/catalogueField'
 import { createCar, uploadCarPhoto, type Car } from '@/app/actions/cars'
 import {
@@ -450,7 +449,7 @@ const AddCarSheet = ({
                 </fieldset>
               ) : null}
 
-              {photoPreview || matchedGeneration ? (
+              {photoPreview || matchedGeneration?.image ? (
                 <figure className="rounded-lg border border-border-default bg-surface-card p-3">
                   {photoPreview ? (
                     // eslint-disable-next-line @next/next/no-img-element -- a local blob: preview of a file not yet uploaded; there is nothing for Next's optimiser to fetch.
@@ -459,17 +458,13 @@ const AddCarSheet = ({
                       alt="Your photo of this car"
                       className="aspect-[16/9] w-full rounded-md object-cover"
                     />
-                  ) : matchedGeneration?.image ? (
+                  ) : (
                     // eslint-disable-next-line @next/next/no-img-element -- Cloudinary already sizes and formats this image; Next's optimiser would transform it a second time.
                     <img
-                      src={matchedGeneration.image.url}
+                      src={matchedGeneration?.image?.url}
                       alt={`Representative image of a ${carName}`}
                       className="aspect-[16/9] w-full rounded-md object-cover"
                     />
-                  ) : (
-                    <div className="flex aspect-[16/9] items-center justify-center rounded-md bg-surface-base">
-                      <CarSilhouette bodyStyle={matchedGeneration?.bodyStyle} className="w-3/4" />
-                    </div>
                   )}
 
                   <figcaption className="mt-2 flex items-center justify-between gap-3 text-xs text-text-secondary">
@@ -484,16 +479,22 @@ const AddCarSheet = ({
                           Remove
                         </button>
                       </>
-                    ) : matchedGeneration?.image ? (
+                    ) : (
                       <span>
-                        Representative image · {matchedGeneration.image.attribution} ·{' '}
-                        {matchedGeneration.image.license}
+                        Representative image · {matchedGeneration?.image?.attribution} ·{' '}
+                        {matchedGeneration?.image?.license}
                       </span>
-                    ) : matchedGeneration ? (
-                      <span>Representative outline · {generationLabel(matchedGeneration)}</span>
-                    ) : null}
+                    )}
                   </figcaption>
                 </figure>
+              ) : null}
+
+              {/* Confirms the link in words. With no catalogue image there is no
+                  honest picture of this car to show, so nothing is pictured. */}
+              {matchedGeneration ? (
+                <p className="text-xs text-text-secondary">
+                  Catalogue match · {generationLabel(matchedGeneration)}
+                </p>
               ) : null}
 
               <div>

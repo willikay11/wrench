@@ -27,8 +27,8 @@ type CarSummary struct {
 	UsageType string `json:"usageType"`
 	CreatedAt string `json:"createdAt"`
 
-	// The car's catalogue link, null for a car with none. The garage draws its
-	// silhouette from BodyStyle when the car has no photo.
+	// The car's catalogue link, null for a car with none. BodyStyle describes
+	// the linked generation; nothing the garage shows depends on it.
 	GenerationId *string `json:"generationId"`
 	BodyStyle    *string `json:"bodyStyle"`
 

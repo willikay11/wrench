@@ -497,7 +497,7 @@ CREATE INDEX idx_vehiclegenerations_modelid
 only representative of one generation — a 1992 and a 2022
 Civic share a make and a model and look nothing alike. The
 generation carries the year range and body style the
-garage needs to pick an image or a silhouette.
+garage needs to pick a representative image.
 
 **A null `endYear`** is a generation still in production,
 and covers every year from `startYear`.

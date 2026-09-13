@@ -482,7 +482,7 @@ components:
           description: |
             The image the car is shown with, resolved by the server:
             the owner's upload, then the linked generation's catalogue
-            image, then null (the client draws the body-style silhouette).
+            image, then null (the client shows a branded placeholder).
           allOf:
             - $ref: '#/components/schemas/CarPhoto'
         modCount:

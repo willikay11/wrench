@@ -252,7 +252,7 @@ func TestCatalogueConstraintsRefuseBadRows(t *testing.T) {
 			constraint: "vehiclegenerations_startyear_check",
 		},
 		{
-			name:       "a body style the silhouettes do not cover",
+			name:       "a body style the catalogue does not allow",
 			statement:  `INSERT INTO vehicleGenerations (modelId, startYear, bodyStyle) VALUES ($1, 2010, 'spaceship')`,
 			args:       []any{modelId},
 			constraint: "vehiclegenerations_bodystyle_check",

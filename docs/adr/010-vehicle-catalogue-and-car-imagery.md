@@ -1,14 +1,15 @@
 # ADR-010: Car Imagery — Vehicle Catalogue vs Runtime Image Search
 
 ## Status
-Accepted
+Accepted — amended 2026-09-13 (fallback is a branded
+placeholder, not a silhouette)
 
 ## Date
 2026-09-13
 
 ## Context
 FR-14 asks for every car in the garage to show "the car
-photo (or placeholder silhouette)". In practice most
+photo (or a branded placeholder)". In practice most
 people adding a car do not have a photo to hand, so the
 garage row fills with empty frames and looks unfinished.
 
@@ -30,7 +31,7 @@ when its owner has not uploaded one:
 ## Decision
 Use a **curated vehicle catalogue**, keyed down to the
 **generation**, with the owner's own upload taking
-precedence and a body-style silhouette as the fallback.
+precedence and a branded placeholder as the fallback.
 
 ### Catalogue shape
 ```
@@ -60,8 +61,9 @@ Tables and constraints: `/docs/schema.md`
 2. The linked generation's catalogue     source: catalogue
    image, labelled "representative"
    and shown with its attribution
-3. A silhouette for the generation's     (no image)
-   body style, or a generic one
+3. A branded placeholder: the Wrench     (no image)
+   mark on a dark panel, picturing no
+   car, with a prompt to add a photo
 ```
 
 The API resolves this order and returns the result. No
@@ -128,9 +130,11 @@ orange Z33 is the car; a stock silver one is a stand-in.
 The catalogue image is labelled as representative and is
 replaced the moment the owner uploads their own.
 
-### Why a silhouette rather than an empty frame
-FR-14 already names the silhouette. It makes the garage
-look complete without claiming to show the user's car.
+### Why a branded placeholder rather than an empty frame
+An empty frame reads as broken. The placeholder makes the
+garage look deliberate, and pictures no car at all, so it
+cannot be taken for the user's car. It carries a prompt to
+add a photo, which is the actual fix.
 
 ## Consequences
 
@@ -152,12 +156,31 @@ where launch dates differed by market.
 
 **No images at launch.** The seed carries no images. Until
 a licensed source is chosen, every car without an upload
-shows a silhouette. This is the correct failure mode, not
+shows the branded placeholder. This is the correct failure
+mode, not
 a gap to fill with unlicensed images.
 
 **Consistency rules add validation.** A linked car whose
 year falls outside its generation, or whose make no longer
 matches, must be refused or unlinked (WRE-265).
+
+## Amendment — 2026-09-13
+
+The fallback was first a body-style silhouette: an outline
+drawn per body style. It is replaced by a branded
+placeholder — the Wrench mark on a dark textured panel,
+with "No photo yet" and a prompt to add a photo.
+
+**Why:** a drawn outline is still a picture of a car, and
+a hand-drawn one looks unfinished beside real photos. Any
+picture of a car next to someone's own car reads as that
+car. The placeholder pictures none, uses only the brand
+mark the project already owns, and turns the gap into the
+prompt that fills it.
+
+`bodyStyle` remains part of the catalogue and of every car
+response. It no longer drives an image; the add-car sheet
+shows it in words when confirming a catalogue match.
 
 ## Revisit Trigger
 Revisit when ANY of the following is true:
