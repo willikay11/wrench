@@ -382,6 +382,96 @@ not a database constraint.
 
 ---
 
+## Vehicle Catalogue
+
+Shared reference data, not anyone's garage. Decision and
+image-sourcing rules: [ADR-010](./adr/010-vehicle-catalogue-and-car-imagery.md).
+
+### vehicleMakes / vehicleModels / vehicleGenerations
+
+```sql
+CREATE TABLE vehicleMakes (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       VARCHAR(50) NOT NULL CHECK (btrim(name) <> ''),
+  createdAt  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX uq_vehiclemakes_name
+  ON vehicleMakes (lower(name));
+
+CREATE TABLE vehicleModels (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  makeId     UUID NOT NULL REFERENCES vehicleMakes(id)
+             ON DELETE CASCADE,
+  name       VARCHAR(50) NOT NULL CHECK (btrim(name) <> ''),
+  createdAt  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX uq_vehiclemodels_make_name
+  ON vehicleModels (makeId, lower(name));
+
+CREATE TABLE vehicleGenerations (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  modelId           UUID NOT NULL REFERENCES vehicleModels(id)
+                    ON DELETE CASCADE,
+  code              VARCHAR(20),
+  startYear         INTEGER NOT NULL
+                    CHECK (startYear BETWEEN 1885 AND 2030),
+  endYear           INTEGER
+                    CHECK (endYear BETWEEN 1885 AND 2030),
+  bodyStyle         VARCHAR NOT NULL
+                    CHECK (bodyStyle IN
+                      ('coupe', 'sedan', 'hatchback', 'wagon',
+                       'convertible', 'suv', 'pickup', 'van')),
+  imagePublicId     VARCHAR(255),
+  imageAttribution  VARCHAR(255),
+  imageLicense      VARCHAR(100),
+  imageSourceUrl    VARCHAR(2048),
+  createdAt         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updatedAt         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT vehiclegenerations_year_order
+    CHECK (endYear IS NULL OR endYear >= startYear),
+  CONSTRAINT vehiclegenerations_image_attributed
+    CHECK (imagePublicId IS NULL
+           OR (imageAttribution IS NOT NULL
+               AND imageLicense IS NOT NULL
+               AND imageSourceUrl IS NOT NULL))
+);
+
+CREATE INDEX idx_vehiclegenerations_modelid
+  ON vehicleGenerations(modelId);
+```
+
+**Why keyed to the generation:** A representative image is
+only representative of one generation — a 1992 and a 2022
+Civic share a make and a model and look nothing alike. The
+generation carries the year range and body style the
+garage needs to pick an image or a silhouette.
+
+**A null `endYear`** is a generation still in production,
+and covers every year from `startYear`.
+
+**Why names are unique on `lower(name)`:** So "Nissan" and
+"nissan" cannot both exist. Models are unique per make, so
+two makes may each have a "GT".
+
+**Index rationale:** `uq_vehiclemodels_make_name` leads with
+`makeId`, so it also serves "models of this make" and no
+separate `makeId` index is needed. `idx_vehiclegenerations_modelid`
+serves "generations of this model".
+
+**Why the image columns are all-or-nothing:** The licences
+catalogue images come under require credit.
+`vehiclegenerations_image_attributed` refuses a public id
+without its attribution, licence and source URL, so an
+image we are not entitled to show cannot be stored.
+
+**Seed:** Migration `000011` loads a starter set of common
+enthusiast cars with no images. Year ranges are model-year
+spans across markets and approximate at the edges; that
+migration is the one place to review them.
+
 ## Build Planner
 
 ### buildStages

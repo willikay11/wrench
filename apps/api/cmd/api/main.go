@@ -25,11 +25,13 @@ import (
 	"github.com/willikay11/wrench/api/internal/config"
 	authsvc "github.com/willikay11/wrench/api/internal/core/services/auth"
 	carsvc "github.com/willikay11/wrench/api/internal/core/services/car"
+	cataloguesvc "github.com/willikay11/wrench/api/internal/core/services/catalogue"
 	emaildispatchsvc "github.com/willikay11/wrench/api/internal/core/services/emaildispatch"
 	waitlistsvc "github.com/willikay11/wrench/api/internal/core/services/waitlist"
 	CustomMiddleware "github.com/willikay11/wrench/api/internal/middleware"
 
 	"github.com/willikay11/wrench/api/internal/mailer"
+	"github.com/willikay11/wrench/api/internal/media"
 	"github.com/willikay11/wrench/api/internal/postgres"
 	"github.com/willikay11/wrench/api/internal/rest"
 	"github.com/willikay11/wrench/api/internal/worker"
@@ -92,6 +94,7 @@ func main() {
 
 	authRepo := postgres.NewAuthRepository(pool)
 	carRepo := postgres.NewCarRepository(pool)
+	catalogueRepo := postgres.NewCatalogueRepository(pool)
 
 	emailOutbox := postgres.NewOutbox(pool)
 	emailSender := mailer.NewResend(resendClient, cfg.FromEmail)
@@ -102,10 +105,21 @@ func main() {
 	emailDispatchSvc := emaildispatchsvc.NewService(emailOutbox, emailSender, cfg.EmailBatchSize, cfg.EmailStaleAfter)
 	authSvc := authsvc.NewService(&oauth2Config, verifier, authRepo, transactionManager, cfg.JWTSecret)
 	carSvc := carsvc.NewService(carRepo, transactionManager)
+
+	// Catalogue images are public and need only the cloud name. A malformed
+	// CLOUDINARY_URL leaves them out rather than stopping the API, since nothing
+	// else reads it yet — and the value itself is never logged, because a valid
+	// one carries the API secret.
+	publicImages, imagesErr := media.NewPublicImages(cfg.CloudinaryURL)
+	if imagesErr != nil {
+		log.Error().Err(imagesErr).Msg("Catalogue images disabled")
+	}
+	catalogueSvc := cataloguesvc.NewService(catalogueRepo, publicImages)
 	// Driving adapters
 	waitlistHandler := rest.NewWaitlistHandler(waitlistSvc)
 	authHandler := rest.NewAuthHandler(authSvc)
 	carHandler := rest.NewCarHandler(carSvc)
+	catalogueHandler := rest.NewCatalogueHandler(catalogueSvc)
 	emailWorker := worker.NewDispatcher(emailDispatchSvc, cfg.EmailPollInterval, cfg.EmailTickTimeout)
 
 	// Router
@@ -142,6 +156,10 @@ func main() {
 		r.Get("/cars", carHandler.ListCars)
 		r.Post("/cars", carHandler.CreateCar)
 		r.Patch("/cars/{id}", carHandler.UpdateCar)
+
+		r.Get("/catalogue/makes", catalogueHandler.SearchMakes)
+		r.Get("/catalogue/makes/{makeId}/models", catalogueHandler.SearchModels)
+		r.Get("/catalogue/models/{modelId}/generations", catalogueHandler.ListGenerations)
 	})
 
 	// Server with timeouts

@@ -492,6 +492,82 @@ components:
               format: date-time
 
     # ─────────────────────────────────────────
+    # CATALOGUE
+    # ─────────────────────────────────────────
+
+    VehicleMake:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Nissan
+
+    VehicleModel:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        makeId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: 350Z
+
+    CatalogueImage:
+      type: object
+      description: |
+        A representative image and the terms it is shown under.
+        Attribution and licence are always present with the URL
+        (ADR-010) and must be displayed with the image.
+      properties:
+        url:
+          type: string
+          example: https://res.cloudinary.com/wrench/image/upload/f_auto,q_auto/wrench/catalogue/generations/550e8400/image
+        attribution:
+          type: string
+          example: Photo by Jane Doe
+        license:
+          type: string
+          example: CC BY-SA 4.0
+        sourceUrl:
+          type: string
+
+    VehicleGeneration:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        modelId:
+          type: string
+          format: uuid
+        code:
+          type: string
+          nullable: true
+          example: Z33
+        startYear:
+          type: integer
+          example: 2002
+        endYear:
+          type: integer
+          nullable: true
+          description: Null while the generation is still in production.
+          example: 2009
+        bodyStyle:
+          type: string
+          enum: [coupe, sedan, hatchback, wagon, convertible, suv, pickup, van]
+          example: coupe
+        image:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/CatalogueImage'
+
+    # ─────────────────────────────────────────
     # MODIFICATIONS
     # ─────────────────────────────────────────
 
@@ -2108,6 +2184,159 @@ paths:
           description: Car deleted. No response body.
         '404':
           $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ─────────────────────────────────────────────────
+  # CATALOGUE
+  # ─────────────────────────────────────────────────
+
+  /catalogue/makes:
+    get:
+      tags:
+        - Catalogue
+      summary: Search vehicle makes
+      description: |
+        Searches the vehicle catalogue (ADR-010). An empty `q`
+        returns makes alphabetically.
+
+        **Requirements:** FR-13
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+        - in: query
+          name: q
+          description: |
+            Case-insensitive. Names starting with the text rank before
+            names containing it. Matched literally — `%` and `_` are text.
+          schema:
+            type: string
+            maxLength: 50
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Matching makes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VehicleMake'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /catalogue/makes/{makeId}/models:
+    parameters:
+      - in: path
+        name: makeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Catalogue
+      summary: Search a make's models
+      description: |
+        No match is `200` with an empty list. Only a make that
+        does not exist is `404`.
+
+        **Requirements:** FR-13
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+        - in: query
+          name: q
+          description: |
+            Case-insensitive. Names starting with the text rank before
+            names containing it. Matched literally — `%` and `_` are text.
+          schema:
+            type: string
+            maxLength: 50
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Matching models of this make
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VehicleModel'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /catalogue/models/{modelId}/generations:
+    parameters:
+      - in: path
+        name: modelId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Catalogue
+      summary: List a model's generations
+      description: |
+        With `year`, only generations whose range contains it.
+        No match is `200` with an empty list — a rare car or an
+        uncovered year is ordinary. Only a model that does not
+        exist is `404`.
+
+        **Requirements:** FR-13, FR-14
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+        - in: query
+          name: year
+          schema:
+            type: integer
+            minimum: 1885
+            maximum: 2030
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Generations of this model, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VehicleGeneration'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
 
