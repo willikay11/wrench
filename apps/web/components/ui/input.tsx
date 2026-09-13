@@ -32,8 +32,12 @@ function Input({
   const messageId = `${inputId}-message`
   const hasMessage = Boolean(error ?? helperText)
 
+  // One block that owns its own spacing. This used to be a fragment, which
+  // handed the label, field and message to the parent as three separate
+  // children — so a plain wrapper left the label touching the field, and a
+  // space-y or gap parent pushed them 16–20px apart. The gap belongs here.
   return (
-    <>
+    <div className="flex w-full flex-col gap-2">
       {label && <Label htmlFor={inputId}>{label?.toUpperCase()}</Label>}
       <div className="relative w-full">
         {leftIcon && (
@@ -70,7 +74,7 @@ function Input({
           {helperText}
         </p>
       ) : null}
-    </>
+    </div>
   )
 }
 

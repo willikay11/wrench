@@ -86,3 +86,20 @@ describe('Input labelling', () => {
     expect(screen.getByLabelText(/MAKE/i).id).not.toBe(screen.getByLabelText(/MODEL/i).id)
   })
 })
+
+describe('Input spacing', () => {
+  // The label-to-field gap used to come from whatever wrapped the Input:
+  // flush against the field in a plain div, 20px away inside space-y-5.
+  // Keeping all three parts in one element is what makes the gap the
+  // component's own, and this fails if it goes back to a fragment.
+  it('keeps its label, field and message in one block, so a parent cannot space them apart', () => {
+    const { container } = render(<Input label="Engine" helperText="Helps Rex" />)
+
+    expect(container.children).toHaveLength(1)
+
+    const block = container.firstElementChild
+    expect(block).toContainElement(screen.getByText('ENGINE'))
+    expect(block).toContainElement(screen.getByLabelText(/ENGINE/i))
+    expect(block).toContainElement(screen.getByText('Helps Rex'))
+  })
+})
