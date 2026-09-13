@@ -56,6 +56,10 @@ const carSchema = z.object({
   usageType: z.enum(USAGE_TYPE_VALUES, { message: 'Pick how you use this car' }),
   // Optional. Trimmed like every other field, and an empty result is sent as
   // no notes at all rather than as "".
+  // The catalogue generation the sheet matched, if any (ADR-010). The API
+  // decides whether it agrees with make, model and year; this checks only that
+  // it is an id.
+  generationId: z.uuid({ message: 'This catalogue match is not valid' }).optional(),
   notes: z
     .string()
     .trim()

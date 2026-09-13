@@ -3,7 +3,7 @@ import { afterEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
 afterEach(() => {
-    cleanup()
+  cleanup()
 })
 
 function makeMql(query: string, matches = false) {
@@ -22,12 +22,18 @@ function makeMql(query: string, matches = false) {
 // Server-side tests — route handlers, anything importing node:crypto — opt
 // into the node environment with a `@vitest-environment node` pragma. There is
 // no window there to patch, and none of these shims apply.
-if (typeof window !== "undefined") {
-  Object.defineProperty(window, "matchMedia", {
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'matchMedia', {
     writable: true,
     configurable: true,
     value: vi.fn((query: string) => makeMql(query)),
   })
+
+  // jsdom has no object URLs, and the photo preview makes one per chosen file.
+  if (typeof URL.createObjectURL !== 'function') {
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  }
 
   window.ResizeObserver = class {
     observe() {}

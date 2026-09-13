@@ -11,6 +11,14 @@ const createCar = vi.fn()
 vi.mock('@/app/actions/cars', () => ({
   listCars: (...args: unknown[]) => listCars(...args),
   createCar: (...args: unknown[]) => createCar(...args),
+  uploadCarPhoto: vi.fn(),
+}))
+// The sheet searches the catalogue as fields are typed into; these tests are
+// about the row, so every search simply finds nothing.
+vi.mock('@/app/actions/catalogue', () => ({
+  searchMakes: vi.fn(async () => ({ status: 'success', items: [] })),
+  searchModels: vi.fn(async () => ({ status: 'success', items: [] })),
+  findGenerations: vi.fn(async () => ({ status: 'success', items: [] })),
 }))
 
 const refresh = vi.fn()
