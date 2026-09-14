@@ -47,6 +47,13 @@ func TestCarWriteErrorTranslatesConstraintsToDomainErrors(t *testing.T) {
 			want: domain.ErrUnknownOwner,
 		},
 		{
+			// Only reachable in a race: the service checks the generation
+			// exists, and this is the database catching one deleted after.
+			name: "the generation foreign key",
+			err:  pgErr(PgForeignKeyViolation, "cars_generationid_fkey"),
+			want: domain.ErrUnknownGeneration,
+		},
+		{
 			// 23502 names a column, not a constraint, so the code alone decides.
 			name: "a not-null violation on any column",
 			err:  &pgconn.PgError{Code: PgNotNullViolation, ColumnName: "make", TableName: "cars"},
@@ -122,7 +129,7 @@ func TestCarWriteErrorSeesThroughWrapping(t *testing.T) {
 // Every constraint the migration declares needs a line in the map, or a write
 // that trips it becomes a 500 with no explanation for the caller.
 func TestEveryDeclaredCarConstraintIsMapped(t *testing.T) {
-	for _, name := range []string{usageTypeConstraint, yearConstraint, ownerConstraint} {
+	for _, name := range []string{usageTypeConstraint, yearConstraint, ownerConstraint, generationConstraint} {
 		require.Contains(t, carConstraintErrors, name)
 		require.Error(t, carConstraintErrors[name])
 	}

@@ -222,11 +222,14 @@ CREATE TABLE cars (
                 ('daily', 'track', 'show',
                  'project', 'off-road', 'weekend')),
   notes       TEXT,
+  generationId UUID REFERENCES vehicleGenerations(id)
+              ON DELETE SET NULL,
   createdAt   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updatedAt   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_cars_userid ON cars(userId);
+CREATE INDEX idx_cars_generationid ON cars(generationId);
 ```
 
 **Index rationale:** `userId` supports the single
@@ -244,6 +247,19 @@ engine for nearly every diagnostic or maintenance
 question. A car without an engine value produces
 materially worse AI responses, so this is enforced
 as NOT NULL at creation.
+
+**Why `generationId` is nullable:** A car may link to a
+catalogue generation ([ADR-010](./adr/010-vehicle-catalogue-and-car-imagery.md)),
+but a car the catalogue does not know is still a car.
+While linked, the car's make, model and year must agree
+with the generation — enforced by the application, which
+has the catalogue names to compare against.
+
+**Why `ON DELETE SET NULL`:** Removing a catalogue entry
+loses the link and never the car. The make, model and year
+the owner entered are untouched.
+`idx_cars_generationid` serves the foreign key, so that
+delete does not scan every car.
 
 ### carMods
 
@@ -289,15 +305,34 @@ is inherently confirmed). Application logic sets
 `confirmed = FALSE` explicitly when `source` is
 `ai_assistant` or `ai_vision`, per FR-33.
 
-### carModPhotos / carServicePhotos / photoUrls
+### carPhotos / carModPhotos / carServicePhotos / photoUrls
 
 ```sql
 CREATE TABLE photoUrls (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   url         VARCHAR NOT NULL,
+  publicId    VARCHAR(255) NOT NULL UNIQUE,
+  width       INTEGER CHECK (width > 0),
+  height      INTEGER CHECK (height > 0),
   createdAt   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updatedAt   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE carPhotos (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type        VARCHAR NOT NULL CHECK (type IN ('primary')),
+  carId       UUID NOT NULL REFERENCES cars(id)
+              ON DELETE CASCADE,
+  photoUrlId  UUID NOT NULL REFERENCES photoUrls(id)
+              ON DELETE CASCADE,
+  createdAt   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updatedAt   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX uq_carphotos_primary
+  ON carPhotos(carId) WHERE type = 'primary';
+
+CREATE INDEX idx_carphotos_carid ON carPhotos(carId);
 
 CREATE TABLE carModPhotos (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -335,6 +370,21 @@ directly on each join table. This normalises the
 URL itself in one place, simplifying any future bulk
 operations on stored URLs (e.g. a Cloudinary
 migration per ADR-007's migration trigger).
+
+**Why `photoUrls` carries `publicId`:** Users' photos are
+delivered through signed URLs built per request (ADR-007),
+and a signature is computed from the Cloudinary public id,
+not from a stored URL. `url` keeps the upload's original
+URL for reference; `publicId` is what delivery and deletion
+use.
+
+**One primary photo per car:** `uq_carphotos_primary` holds
+it in the database. Partial, so a later photo type — a
+gallery — is not limited to one per car.
+
+**Deleting a car** cascades to its `carPhotos` rows but not
+to `photoUrls` or the Cloudinary asset; that cleanup belongs
+to the car-deletion job (see `DELETE /cars/{carId}`).
 
 ### carService
 
@@ -381,6 +431,96 @@ a non-blocking warning at the application layer,
 not a database constraint.
 
 ---
+
+## Vehicle Catalogue
+
+Shared reference data, not anyone's garage. Decision and
+image-sourcing rules: [ADR-010](./adr/010-vehicle-catalogue-and-car-imagery.md).
+
+### vehicleMakes / vehicleModels / vehicleGenerations
+
+```sql
+CREATE TABLE vehicleMakes (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       VARCHAR(50) NOT NULL CHECK (btrim(name) <> ''),
+  createdAt  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX uq_vehiclemakes_name
+  ON vehicleMakes (lower(name));
+
+CREATE TABLE vehicleModels (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  makeId     UUID NOT NULL REFERENCES vehicleMakes(id)
+             ON DELETE CASCADE,
+  name       VARCHAR(50) NOT NULL CHECK (btrim(name) <> ''),
+  createdAt  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX uq_vehiclemodels_make_name
+  ON vehicleModels (makeId, lower(name));
+
+CREATE TABLE vehicleGenerations (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  modelId           UUID NOT NULL REFERENCES vehicleModels(id)
+                    ON DELETE CASCADE,
+  code              VARCHAR(20),
+  startYear         INTEGER NOT NULL
+                    CHECK (startYear BETWEEN 1885 AND 2030),
+  endYear           INTEGER
+                    CHECK (endYear BETWEEN 1885 AND 2030),
+  bodyStyle         VARCHAR NOT NULL
+                    CHECK (bodyStyle IN
+                      ('coupe', 'sedan', 'hatchback', 'wagon',
+                       'convertible', 'suv', 'pickup', 'van')),
+  imagePublicId     VARCHAR(255),
+  imageAttribution  VARCHAR(255),
+  imageLicense      VARCHAR(100),
+  imageSourceUrl    VARCHAR(2048),
+  createdAt         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updatedAt         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT vehiclegenerations_year_order
+    CHECK (endYear IS NULL OR endYear >= startYear),
+  CONSTRAINT vehiclegenerations_image_attributed
+    CHECK (imagePublicId IS NULL
+           OR (imageAttribution IS NOT NULL
+               AND imageLicense IS NOT NULL
+               AND imageSourceUrl IS NOT NULL))
+);
+
+CREATE INDEX idx_vehiclegenerations_modelid
+  ON vehicleGenerations(modelId);
+```
+
+**Why keyed to the generation:** A representative image is
+only representative of one generation — a 1992 and a 2022
+Civic share a make and a model and look nothing alike. The
+generation carries the year range and body style the
+garage needs to pick a representative image.
+
+**A null `endYear`** is a generation still in production,
+and covers every year from `startYear`.
+
+**Why names are unique on `lower(name)`:** So "Nissan" and
+"nissan" cannot both exist. Models are unique per make, so
+two makes may each have a "GT".
+
+**Index rationale:** `uq_vehiclemodels_make_name` leads with
+`makeId`, so it also serves "models of this make" and no
+separate `makeId` index is needed. `idx_vehiclegenerations_modelid`
+serves "generations of this model".
+
+**Why the image columns are all-or-nothing:** The licences
+catalogue images come under require credit.
+`vehiclegenerations_image_attributed` refuses a public id
+without its attribution, licence and source URL, so an
+image we are not entitled to show cannot be stored.
+
+**Seed:** Migration `000011` loads a starter set of common
+enthusiast cars with no images. Year ranges are model-year
+spans across markets and approximate at the edges; that
+migration is the one place to review them.
 
 ## Build Planner
 

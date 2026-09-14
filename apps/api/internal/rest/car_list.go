@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
 	"github.com/willikay11/wrench/api/internal/core/domain"
@@ -25,6 +26,15 @@ type CarSummary struct {
 	Engine    string `json:"engine"`
 	UsageType string `json:"usageType"`
 	CreatedAt string `json:"createdAt"`
+
+	// The car's catalogue link, null for a car with none. BodyStyle describes
+	// the linked generation; nothing the garage shows depends on it.
+	GenerationId *string `json:"generationId"`
+	BodyStyle    *string `json:"bodyStyle"`
+
+	// Photo is the owner's upload, or the linked generation's credited catalogue
+	// image, or null — resolved by the server so no client re-implements it.
+	Photo *domain.CarPhoto `json:"photo"`
 }
 
 // CursorPagination tells a client whether to ask again and with what.
@@ -129,13 +139,16 @@ func carListResponse(page domain.CarPage) CarListResponse {
 	summaries := make([]CarSummary, 0, len(page.Cars))
 	for _, car := range page.Cars {
 		summaries = append(summaries, CarSummary{
-			Id:        car.Id.String(),
-			Make:      car.Make,
-			Model:     car.Model,
-			Year:      car.Year,
-			Engine:    car.Engine,
-			UsageType: car.UsageType,
-			CreatedAt: car.CreatedAt.UTC().Format(time.RFC3339Nano),
+			Id:           car.Id.String(),
+			Make:         car.Make,
+			Model:        car.Model,
+			Year:         car.Year,
+			Engine:       car.Engine,
+			UsageType:    car.UsageType,
+			CreatedAt:    car.CreatedAt.UTC().Format(time.RFC3339Nano),
+			GenerationId: idString(car.GenerationId),
+			BodyStyle:    car.BodyStyle,
+			Photo:        car.Photo,
 		})
 	}
 
@@ -150,4 +163,12 @@ func carListResponse(page domain.CarPage) CarListResponse {
 	}
 
 	return response
+}
+
+func idString(id *uuid.UUID) *string {
+	if id == nil {
+		return nil
+	}
+	value := id.String()
+	return &value
 }

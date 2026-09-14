@@ -62,6 +62,14 @@ func (m *mockCarRepo) List(_ context.Context, query domain.CarQuery) (domain.Car
 	return m.page, nil
 }
 
+// GetForUpdate serves the stored car for updates that read before writing.
+func (m *mockCarRepo) GetForUpdate(context.Context, uuid.UUID, uuid.UUID) (domain.Car, error) {
+	if m.err != nil {
+		return domain.Car{}, m.err
+	}
+	return m.result, nil
+}
+
 func (m *mockCarRepo) Update(_ context.Context, car domain.UpdateCar) (domain.Car, error) {
 	m.calls++
 	m.receiveUpdatedCar = car
@@ -97,7 +105,7 @@ func aCar() domain.Car {
 // port rather than the concrete service — NewService returns an unexported
 // type, and the interface is what the handler actually depends on.
 func newService(repo *mockCarRepo) ports.CarService {
-	return car.NewService(repo, &mockTxManager{})
+	return car.NewService(repo, &fakeCatalogue{}, nil, nil, &mockTxManager{})
 }
 
 func TestCreateCarPassesTheCarToTheRepositoryUnchanged(t *testing.T) {

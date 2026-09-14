@@ -8,6 +8,12 @@ const listCars = vi.fn()
 vi.mock('@/app/actions/cars', () => ({
   listCars: (...args: unknown[]) => listCars(...args),
   createCar: vi.fn(),
+  uploadCarPhoto: vi.fn(),
+}))
+vi.mock('@/app/actions/catalogue', () => ({
+  searchMakes: vi.fn(async () => ({ status: 'success', items: [] })),
+  searchModels: vi.fn(async () => ({ status: 'success', items: [] })),
+  findGenerations: vi.fn(async () => ({ status: 'success', items: [] })),
 }))
 vi.mock('@/components/auth/sessionProvider', () => ({
   useSession: () => ({ session: { accessToken: 'token' }, isLoading: false, refresh: vi.fn() }),

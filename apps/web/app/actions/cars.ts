@@ -1,6 +1,7 @@
 'use server'
 
 import { carSchema } from '@/lib/validation/car'
+import { MAX_PHOTO_BYTES } from '@/lib/validation/photo'
 
 /**
  * The garage's two API calls.
@@ -17,6 +18,14 @@ import { carSchema } from '@/lib/validation/car'
  */
 
 /** A car as the API returns it, narrowed to what the garage renders. */
+/** The image a car is shown with, resolved by the API (ADR-010). */
+export type CarPhoto = {
+  url: string
+  source: 'upload' | 'catalogue'
+  /** Required credit for a catalogue image; null for the owner's own upload. */
+  attribution: string | null
+}
+
 export type Car = {
   id: string
   make: string
@@ -24,6 +33,9 @@ export type Car = {
   year: number
   engine: string
   usageType: string
+  generationId?: string | null
+  bodyStyle?: string | null
+  photo?: CarPhoto | null
 }
 
 /** One page of the garage, from GET /v1/cars. */
@@ -260,5 +272,124 @@ export async function createCar(accessToken: string, input: unknown): Promise<Cr
   }
 
   console.error('cars: upstream rejected the request', { status: response.status })
+  return { status: 'error', message: GENERIC_FAILURE }
+}
+
+export type UploadPhotoResult =
+  | { status: 'success'; photo: CarPhoto }
+  /** Something about the file itself, which the user can fix by choosing another. */
+  | { status: 'invalid'; message: string }
+  | { status: 'unauthenticated' }
+  | { status: 'error'; message: string }
+
+// A photo is uploaded after its car exists, so it has a real id to go under
+// (ADR-007, amended). The id reaches the path from the browser, so it is
+// checked to be one.
+const CAR_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Longer than the list and create calls: this one carries up to 10MB.
+const UPLOAD_TIMEOUT_MS = 30_000
+
+const isCarPhoto = (value: unknown): value is CarPhoto => {
+  if (typeof value !== 'object' || value === null) return false
+
+  const { url, source, attribution } = value as Record<string, unknown>
+
+  return (
+    typeof url === 'string' &&
+    url.length > 0 &&
+    (source === 'upload' || source === 'catalogue') &&
+    (attribution === null || typeof attribution === 'string')
+  )
+}
+
+/**
+ * Sets a car's photo.
+ *
+ * The file's type is not judged here: the API decides by its content (FR-37),
+ * and a check on the name or declared type would only disagree with it. What
+ * is checked is what can be known without reading the file — that there is one,
+ * and that it is not so large the request is pointless to send.
+ */
+export async function uploadCarPhoto(
+  accessToken: string,
+  carId: string,
+  formData: FormData
+): Promise<UploadPhotoResult> {
+  if (!accessToken) return { status: 'unauthenticated' }
+
+  if (!CAR_ID_PATTERN.test(carId)) {
+    return { status: 'error', message: GENERIC_FAILURE }
+  }
+
+  const file = formData.get('file')
+
+  if (!(file instanceof File) || file.size === 0) {
+    return { status: 'invalid', message: 'Choose a photo to upload.' }
+  }
+
+  if (file.size > MAX_PHOTO_BYTES) {
+    return { status: 'invalid', message: 'This photo is larger than 10MB.' }
+  }
+
+  const baseUrl = process.env.API_BASE_URL
+  const channelToken = process.env.CHANNEL_TOKEN
+
+  if (!baseUrl || !channelToken) {
+    console.error('cars: API_BASE_URL or CHANNEL_TOKEN is not configured')
+    return { status: 'error', message: GENERIC_FAILURE }
+  }
+
+  const body = new FormData()
+  body.append('file', file, file.name)
+
+  let response: Response
+
+  try {
+    response = await fetch(`${baseUrl}/v1/cars/${carId}/photo`, {
+      method: 'POST',
+      // No Content-Type: fetch sets multipart/form-data with the boundary it
+      // chose, and a hand-written one would not match the body.
+      headers: {
+        'X-Channel-Token': channelToken,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body,
+      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+      cache: 'no-store',
+    })
+  } catch (cause) {
+    console.error('cars: photo upload failed', {
+      reason: cause instanceof Error ? cause.name : 'unknown',
+    })
+    return { status: 'error', message: GENERIC_FAILURE }
+  }
+
+  if (response.status === 201) {
+    const payload: unknown = await response.json().catch(() => null)
+
+    if (!isCarPhoto(payload)) {
+      console.error('cars: uploaded photo could not be parsed')
+      return { status: 'error', message: 'Your photo was saved, but we could not show it yet.' }
+    }
+
+    return { status: 'success', photo: payload }
+  }
+
+  if (response.status === 401) return { status: 'unauthenticated' }
+
+  if (response.status === 422) {
+    const reasons = fieldErrorsFrom(await response.json().catch(() => null))
+    return { status: 'invalid', message: reasons.file ?? 'This file could not be used as a photo.' }
+  }
+
+  if (response.status === 503) {
+    return {
+      status: 'error',
+      message: 'Photo uploads are unavailable right now. Please try again later.',
+    }
+  }
+
+  console.error('cars: upstream rejected the photo', { status: response.status })
   return { status: 'error', message: GENERIC_FAILURE }
 }

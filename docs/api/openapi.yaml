@@ -381,10 +381,12 @@ components:
       properties:
         make:
           type: string
+          minLength: 1
           maxLength: 50
           example: Nissan
         model:
           type: string
+          minLength: 1
           maxLength: 50
           example: 350Z
         year:
@@ -394,6 +396,7 @@ components:
           example: 2003
         engine:
           type: string
+          minLength: 1
           maxLength: 100
           example: VQ35DE 3.5L V6
         usageType:
@@ -405,6 +408,15 @@ components:
           maxLength: 1000
           nullable: true
           example: Track build, not road registered
+        generationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Optional link to a catalogue generation (ADR-010). When set,
+            make, model and year must agree with it — each field that does
+            not is reported in a 422, and a generation that does not exist
+            is reported on generationId.
 
     UpdateCarRequest:
       type: object
@@ -412,9 +424,11 @@ components:
       properties:
         make:
           type: string
+          minLength: 1
           maxLength: 50
         model:
           type: string
+          minLength: 1
           maxLength: 50
         year:
           type: integer
@@ -422,6 +436,7 @@ components:
           maximum: 2030
         engine:
           type: string
+          minLength: 1
           maxLength: 100
         usageType:
           type: string
@@ -430,6 +445,15 @@ components:
           type: string
           maxLength: 1000
           nullable: true
+        generationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Absent leaves the link as it is; null unlinks the car; a value
+            links it. While linked, the car as it will be after this update
+            must agree with the generation — a change that breaks that is a
+            422 unless the same request unlinks or relinks.
 
     CarSummary:
       type: object
@@ -453,15 +477,31 @@ components:
         usageType:
           type: string
           example: track
-        primaryPhotoUrl:
-          type: string
+        photo:
           nullable: true
+          description: |
+            The image the car is shown with, resolved by the server:
+            the owner's upload, then the linked generation's catalogue
+            image, then null (the client shows a branded placeholder).
+          allOf:
+            - $ref: '#/components/schemas/CarPhoto'
         modCount:
           type: integer
           example: 12
         createdAt:
           type: string
           format: date-time
+        generationId:
+          type: string
+          format: uuid
+          nullable: true
+        bodyStyle:
+          type: string
+          nullable: true
+          enum: [coupe, sedan, hatchback, wagon, convertible, suv, pickup, van]
+          description: |
+            From the linked generation; null for a car with no link.
+            Read-only — a value sent on create is ignored.
 
     CarDetail:
       allOf:
@@ -484,6 +524,98 @@ components:
             updatedAt:
               type: string
               format: date-time
+
+    CarPhoto:
+      type: object
+      properties:
+        url:
+          type: string
+          description: |
+            For an upload, a signed authenticated URL regenerated on each
+            response. It does not expire on its own (ADR-007, amended).
+        source:
+          type: string
+          enum: [upload, catalogue]
+        attribution:
+          type: string
+          nullable: true
+          description: Required credit for a catalogue image; null for an upload.
+
+    # ─────────────────────────────────────────
+    # CATALOGUE
+    # ─────────────────────────────────────────
+
+    VehicleMake:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Nissan
+
+    VehicleModel:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        makeId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: 350Z
+
+    CatalogueImage:
+      type: object
+      description: |
+        A representative image and the terms it is shown under.
+        Attribution and licence are always present with the URL
+        (ADR-010) and must be displayed with the image.
+      properties:
+        url:
+          type: string
+          example: https://res.cloudinary.com/wrench/image/upload/f_auto,q_auto/wrench/catalogue/generations/550e8400/image
+        attribution:
+          type: string
+          example: Photo by Jane Doe
+        license:
+          type: string
+          example: CC BY-SA 4.0
+        sourceUrl:
+          type: string
+
+    VehicleGeneration:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        modelId:
+          type: string
+          format: uuid
+        code:
+          type: string
+          nullable: true
+          example: Z33
+        startYear:
+          type: integer
+          example: 2002
+        endYear:
+          type: integer
+          nullable: true
+          description: Null while the generation is still in production.
+          example: 2009
+        bodyStyle:
+          type: string
+          enum: [coupe, sedan, hatchback, wagon, convertible, suv, pickup, van]
+          example: coupe
+        image:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/CatalogueImage'
 
     # ─────────────────────────────────────────
     # MODIFICATIONS
@@ -2102,6 +2234,221 @@ paths:
           description: Car deleted. No response body.
         '404':
           $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /cars/{carId}/photo:
+    parameters:
+      - in: path
+        name: carId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Cars
+      summary: Set a car's photo
+      description: |
+        Stores the photo as the car's primary photo, replacing any
+        previous one, whose asset is then deleted.
+
+        A dedicated endpoint rather than `/upload/photo` + "include
+        the URL": the car in the path is checked for ownership before
+        anything is stored, and the server writes the reference
+        itself (ADR-007, amended).
+
+        **Accepted:** JPEG, PNG, WebP, HEIC — decided by the file's
+        magic bytes, never its name or declared type. SVG is refused.
+        **Max size:** 10MB.
+
+        **Requirements:** FR-17, FR-35, FR-37, NFR-04, NFR-25
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Photo stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CarPhoto'
+        '400':
+          description: Not a multipart body
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          description: No file, an empty file, over 10MB, or not an accepted image type
+        '502':
+          description: The photo could not be stored
+        '503':
+          description: Photo uploads are not configured
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ─────────────────────────────────────────────────
+  # CATALOGUE
+  # ─────────────────────────────────────────────────
+
+  /catalogue/makes:
+    get:
+      tags:
+        - Catalogue
+      summary: Search vehicle makes
+      description: |
+        Searches the vehicle catalogue (ADR-010). An empty `q`
+        returns makes alphabetically.
+
+        **Requirements:** FR-13
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+        - in: query
+          name: q
+          description: |
+            Case-insensitive. Names starting with the text rank before
+            names containing it. Matched literally — `%` and `_` are text.
+          schema:
+            type: string
+            maxLength: 50
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Matching makes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VehicleMake'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /catalogue/makes/{makeId}/models:
+    parameters:
+      - in: path
+        name: makeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Catalogue
+      summary: Search a make's models
+      description: |
+        No match is `200` with an empty list. Only a make that
+        does not exist is `404`.
+
+        **Requirements:** FR-13
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+        - in: query
+          name: q
+          description: |
+            Case-insensitive. Names starting with the text rank before
+            names containing it. Matched literally — `%` and `_` are text.
+          schema:
+            type: string
+            maxLength: 50
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Matching models of this make
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VehicleModel'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /catalogue/models/{modelId}/generations:
+    parameters:
+      - in: path
+        name: modelId
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Catalogue
+      summary: List a model's generations
+      description: |
+        With `year`, only generations whose range contains it.
+        No match is `200` with an empty list — a rare car or an
+        uncovered year is ordinary. Only a model that does not
+        exist is `404`.
+
+        **Requirements:** FR-13, FR-14
+      parameters:
+        - $ref: '#/components/parameters/ChannelToken'
+        - in: query
+          name: year
+          schema:
+            type: integer
+            minimum: 1885
+            maximum: 2030
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Generations of this model, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VehicleGeneration'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
 

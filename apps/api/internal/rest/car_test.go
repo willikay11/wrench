@@ -257,10 +257,17 @@ func TestCreateCarReportsEachInvalidFieldByItsJSONName(t *testing.T) {
 			reason: "This field is required",
 		},
 		{
-			name:   "make below the minimum length",
-			mutate: func(b map[string]any) { b["make"] = "BM" },
+			// Trimmed before validation, so whitespace is not a make.
+			name:   "a make that is only whitespace",
+			mutate: func(b map[string]any) { b["make"] = "   " },
 			field:  "make",
-			reason: "This field must be at least 3 characters",
+			reason: "This field is required",
+		},
+		{
+			name:   "an engine that is only whitespace",
+			mutate: func(b map[string]any) { b["engine"] = " \t " },
+			field:  "engine",
+			reason: "This field is required",
 		},
 		{
 			name:   "make above the maximum length",
@@ -332,13 +339,6 @@ func TestCreateCarReportsEachInvalidFieldByItsJSONName(t *testing.T) {
 			field:  "usageType",
 			reason: "This field must be one of: daily, track, show, weekend, off-road, project",
 		},
-		{
-			// omitempty means notes may be absent, but not present-and-too-short.
-			name:   "notes present but too short",
-			mutate: func(b map[string]any) { b["notes"] = "ok" },
-			field:  "notes",
-			reason: "This field must be at least 3 characters",
-		},
 	}
 
 	for _, tc := range cases {
@@ -369,7 +369,7 @@ func TestCreateCarReportsAllInvalidFieldsTogether(t *testing.T) {
 	service := &fakeCarService{}
 
 	recorder := postJSON(t, rest.NewCarHandler(service), uuid.New(), map[string]any{
-		"make":      "BM",
+		"make":      "   ",
 		"year":      1700,
 		"usageType": "drift",
 	})
@@ -383,7 +383,7 @@ func TestCreateCarReportsAllInvalidFieldsTogether(t *testing.T) {
 	}
 
 	require.Equal(t, map[string]string{
-		"make":      "This field must be at least 3 characters",
+		"make":      "This field is required",
 		"model":     "This field is required",
 		"year":      "This field must be 1885 or more",
 		"engine":    "This field is required",
@@ -744,4 +744,57 @@ func TestCreateCarReturnsServerSetTimestampsAndIgnoresSentOnes(t *testing.T) {
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &raw))
 	require.Contains(t, raw, "createdAt")
 	require.Contains(t, raw, "updatedAt")
+}
+
+// Real cars have short names, and the spec sets no minimum: CreateCarRequest
+// declares only maxLength. Each of these was a 422 while the API required three
+// characters, which turned away a BMW M3 owner at the moment they tried to start.
+func TestCreateCarAcceptsTheShortNamesRealCarsHave(t *testing.T) {
+	cases := []struct {
+		name  string
+		field string
+		value string
+	}{
+		{name: "an MG", field: "make", value: "MG"},
+		{name: "a BMW M3", field: "model", value: "M3"},
+		{name: "a Nissan Z", field: "model", value: "Z"},
+		{name: "a Toyota 86", field: "model", value: "86"},
+		{name: "a V8", field: "engine", value: "V8"},
+		{name: "a two-letter note", field: "notes", value: "ok"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			service := &fakeCarService{}
+
+			body := validCar()
+			body[tc.field] = tc.value
+
+			recorder := postJSON(t, rest.NewCarHandler(service), uuid.New(), body)
+
+			require.Equal(t, http.StatusCreated, recorder.Code, recorder.Body.String())
+			require.Equal(t, 1, service.calls)
+		})
+	}
+}
+
+// Trimmed on the server, not only in the form: an API client that pads a value
+// must not create a second spelling of the same make.
+func TestCreateCarStoresValuesWithoutSurroundingWhitespace(t *testing.T) {
+	service := &fakeCarService{}
+
+	body := validCar()
+	body["make"] = "  Mitsubishi \t"
+	body["model"] = " Evolution 10 "
+	body["engine"] = "\n4B11T  "
+	body["notes"] = "   "
+
+	recorder := postJSON(t, rest.NewCarHandler(service), uuid.New(), body)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+	require.Equal(t, "Mitsubishi", service.received.Make)
+	require.Equal(t, "Evolution 10", service.received.Model)
+	require.Equal(t, "4B11T", service.received.Engine)
+	// Whitespace-only notes are no notes.
+	require.Empty(t, service.received.Notes)
 }

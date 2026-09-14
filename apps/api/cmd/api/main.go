@@ -23,13 +23,16 @@ import (
 
 	"github.com/willikay11/wrench/api/internal/cache"
 	"github.com/willikay11/wrench/api/internal/config"
+	"github.com/willikay11/wrench/api/internal/core/ports"
 	authsvc "github.com/willikay11/wrench/api/internal/core/services/auth"
 	carsvc "github.com/willikay11/wrench/api/internal/core/services/car"
+	cataloguesvc "github.com/willikay11/wrench/api/internal/core/services/catalogue"
 	emaildispatchsvc "github.com/willikay11/wrench/api/internal/core/services/emaildispatch"
 	waitlistsvc "github.com/willikay11/wrench/api/internal/core/services/waitlist"
 	CustomMiddleware "github.com/willikay11/wrench/api/internal/middleware"
 
 	"github.com/willikay11/wrench/api/internal/mailer"
+	"github.com/willikay11/wrench/api/internal/media"
 	"github.com/willikay11/wrench/api/internal/postgres"
 	"github.com/willikay11/wrench/api/internal/rest"
 	"github.com/willikay11/wrench/api/internal/worker"
@@ -92,6 +95,7 @@ func main() {
 
 	authRepo := postgres.NewAuthRepository(pool)
 	carRepo := postgres.NewCarRepository(pool)
+	catalogueRepo := postgres.NewCatalogueRepository(pool)
 
 	emailOutbox := postgres.NewOutbox(pool)
 	emailSender := mailer.NewResend(resendClient, cfg.FromEmail)
@@ -101,11 +105,35 @@ func main() {
 	waitlistSvc := waitlistsvc.NewService(waitlistRepo, waitlistRedis, emailOutbox, transactionManager)
 	emailDispatchSvc := emaildispatchsvc.NewService(emailOutbox, emailSender, cfg.EmailBatchSize, cfg.EmailStaleAfter)
 	authSvc := authsvc.NewService(&oauth2Config, verifier, authRepo, transactionManager, cfg.JWTSecret)
-	carSvc := carsvc.NewService(carRepo, transactionManager)
+	// Media (ADR-007). A malformed CLOUDINARY_URL disables images rather than
+	// stopping the API: the garage still works, photo uploads answer 503, and
+	// cars fall back to their silhouette. The value itself is never logged,
+	// because a valid one carries the API secret.
+	//
+	// Catalogue images need only the cloud name; users' photos need the full
+	// credential to upload and sign.
+	publicImages, imagesErr := media.NewPublicImages(cfg.CloudinaryURL)
+	if imagesErr != nil {
+		log.Error().Err(imagesErr).Msg("Catalogue images disabled")
+	}
+
+	// Declared as the port and left nil when unconfigured: a typed nil pointer
+	// inside the interface would not compare equal to nil, and the service
+	// relies on that comparison to answer "unavailable".
+	var mediaStore ports.MediaStore
+	if store, storeErr := media.NewStore(cfg.CloudinaryURL); storeErr != nil {
+		log.Error().Err(storeErr).Msg("Car photo uploads disabled")
+	} else {
+		mediaStore = store
+	}
+
+	carSvc := carsvc.NewService(carRepo, catalogueRepo, mediaStore, publicImages, transactionManager)
+	catalogueSvc := cataloguesvc.NewService(catalogueRepo, publicImages)
 	// Driving adapters
 	waitlistHandler := rest.NewWaitlistHandler(waitlistSvc)
 	authHandler := rest.NewAuthHandler(authSvc)
 	carHandler := rest.NewCarHandler(carSvc)
+	catalogueHandler := rest.NewCatalogueHandler(catalogueSvc)
 	emailWorker := worker.NewDispatcher(emailDispatchSvc, cfg.EmailPollInterval, cfg.EmailTickTimeout)
 
 	// Router
@@ -142,6 +170,11 @@ func main() {
 		r.Get("/cars", carHandler.ListCars)
 		r.Post("/cars", carHandler.CreateCar)
 		r.Patch("/cars/{id}", carHandler.UpdateCar)
+		r.Post("/cars/{carId}/photo", carHandler.UploadCarPhoto)
+
+		r.Get("/catalogue/makes", catalogueHandler.SearchMakes)
+		r.Get("/catalogue/makes/{makeId}/models", catalogueHandler.SearchModels)
+		r.Get("/catalogue/models/{modelId}/generations", catalogueHandler.ListGenerations)
 	})
 
 	// Server with timeouts

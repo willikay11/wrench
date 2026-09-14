@@ -66,8 +66,8 @@ Version: 3.0 — adds budget tracker, Rex usage allowance,
 
 - FR-14: A user must be able to view all cars in their
   garage as a horizontally scrollable spotlight row of
-  cards, each showing the car photo (or placeholder
-  silhouette), name, status badge, and mod count
+  cards, each showing the car photo (or a branded
+  placeholder), name, status badge, and mod count
 
 - FR-15: A user must be able to add a modification to a
   car including name, category, cost, installation date,

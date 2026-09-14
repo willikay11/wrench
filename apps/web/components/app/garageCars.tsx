@@ -13,7 +13,7 @@ import { AddCarSheet } from '@/components/app/addCarSheet'
 import { PageHeader } from '@/components/app/pageHeader'
 import { Button } from '@/components/ui/button'
 import { useSession } from '@/components/auth/sessionProvider'
-import { listCars, type Car } from '@/app/actions/cars'
+import { listCars, type Car, type CarPhoto } from '@/app/actions/cars'
 
 /**
  * The garage row, and the thing that fetches it.
@@ -128,6 +128,19 @@ const GarageCars = () => {
     )
   }
 
+  // A photo added from a card replaces that car's placeholder where it stands.
+  // Re-reading the list for one photo would drop any further pages on screen.
+  const setPhoto = (carId: string, photo: CarPhoto) => {
+    setState((current) =>
+      current.status === 'ready'
+        ? {
+            ...current,
+            cars: current.cars.map((car) => (car.id === carId ? { ...car, photo } : car)),
+          }
+        : current
+    )
+  }
+
   const header = (
     <PageHeader
       title="Your garage"
@@ -168,7 +181,7 @@ const GarageCars = () => {
         <ul className="grid list-none gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {state.cars.map((car) => (
             <li key={car.id}>
-              <CarCard car={car} />
+              <CarCard car={car} onPhotoAdded={setPhoto} />
             </li>
           ))}
 

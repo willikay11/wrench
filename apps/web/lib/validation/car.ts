@@ -36,12 +36,12 @@ const carSchema = z.object({
   make: z
     .string()
     .trim()
-    .min(3, { message: 'This field must be at least 3 characters' })
+    .min(1, { message: 'This field is required' })
     .max(50, { message: 'This field must be at most 50 characters' }),
   model: z
     .string()
     .trim()
-    .min(3, { message: 'This field must be at least 3 characters' })
+    .min(1, { message: 'This field is required' })
     .max(50, { message: 'This field must be at most 50 characters' }),
   year: z
     .number({ message: 'This field is required' })
@@ -51,20 +51,21 @@ const carSchema = z.object({
   engine: z
     .string()
     .trim()
-    .min(3, { message: 'This field must be at least 3 characters' })
+    .min(1, { message: 'This field is required' })
     .max(100, { message: 'This field must be at most 100 characters' }),
   usageType: z.enum(USAGE_TYPE_VALUES, { message: 'Pick how you use this car' }),
-  // Optional, but the API rejects a present-and-too-short note, so an empty
-  // string is normalised away rather than sent as "".
+  // Optional. Trimmed like every other field, and an empty result is sent as
+  // no notes at all rather than as "".
+  // The catalogue generation the sheet matched, if any (ADR-010). The API
+  // decides whether it agrees with make, model and year; this checks only that
+  // it is an id.
+  generationId: z.uuid({ message: 'This catalogue match is not valid' }).optional(),
   notes: z
     .string()
     .trim()
     .max(NOTES_MAX, { message: `This field must be at most ${NOTES_MAX} characters` })
     .optional()
-    .transform((notes) => (notes === '' ? undefined : notes))
-    .refine((notes) => notes === undefined || notes.length >= 3, {
-      message: 'This field must be at least 3 characters',
-    }),
+    .transform((notes) => (notes === '' ? undefined : notes)),
 })
 
 type CarInput = z.infer<typeof carSchema>
